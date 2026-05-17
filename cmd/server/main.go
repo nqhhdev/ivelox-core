@@ -1,0 +1,34 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/nqhhdev/ivelox-core/config"
+	httpdelivery "github.com/nqhhdev/ivelox-core/internal/delivery/http"
+	"github.com/nqhhdev/ivelox-core/internal/repository/postgres"
+	"github.com/nqhhdev/ivelox-core/internal/usecase"
+)
+
+func main() {
+	cfg := config.Load()
+
+	db, err := pgxpool.New(context.Background(), cfg.DatabaseURL)
+	if err != nil {
+		log.Fatalf("failed to connect to database: %v", err)
+	}
+	defer db.Close()
+
+	userRepo := postgres.NewUserRepository(db)
+	authUC := usecase.NewAuthUsecase(userRepo)
+
+	router := httpdelivery.NewRouter(cfg.FrontendURL, cfg.SupabaseJWTSecret, authUC)
+
+	addr := fmt.Sprintf(":%s", cfg.Port)
+	log.Printf("Server starting on %s", addr)
+	if err := router.Run(addr); err != nil {
+		log.Fatalf("Failed to start server: %v", err)
+	}
+}
