@@ -2,3 +2,7 @@
 *.env.local
 bin/
 tmp/
+
+# Agent skills (local tooling, not project code)
+.agents/
+skills-lock.json
