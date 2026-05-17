@@ -164,17 +164,17 @@ docker run -p 8080:8080 \
 
 ## 5. Deploy to Railway (Recommended)
 
-Railway là platform deploy Go app nhanh nhất, free tier có $5 credit/month.
+Railway is the fastest platform for deploying Go apps. Free tier includes $5 credit/month.
 
 ### 5.1 Setup
 
-1. Vào https://railway.app → New Project → Deploy from GitHub repo
-2. Chọn `nqhhdev/ivelox-core`
-3. Railway tự detect Go và build
+1. Go to https://railway.app → New Project → Deploy from GitHub repo
+2. Select `nqhhdev/ivelox-core`
+3. Railway auto-detects Go and builds
 
 ### 5.2 Set environment variables
 
-Trong Railway dashboard → Variables, thêm:
+In Railway dashboard → Variables, add:
 
 ```
 PORT=8080
@@ -188,13 +188,13 @@ DATABASE_URL=your-database-url
 
 Railway dashboard → Settings → Domains → Generate Domain
 
-URL sẽ có dạng: `https://ivelox-core-production.up.railway.app`
+URL format: `https://ivelox-core-production.up.railway.app`
 
 ---
 
-## 6. Deploy to Fly.io (Alternative)
+## 6. Deploy to Fly.io (Recommended — current)
 
-Fly.io cho phép deploy Docker container, free tier 3 shared VMs.
+Fly.io deploys Docker containers. Singapore region for lowest latency.
 
 ### 6.1 Install flyctl
 
@@ -203,19 +203,18 @@ brew install flyctl
 fly auth login
 ```
 
-### 6.2 Init và deploy
+### 6.2 Deploy
 
 ```bash
 cd ivelox-core
-fly launch --name ivelox-core --region sin  # Singapore — gần VN nhất
-fly secrets set SUPABASE_JWT_SECRET=your-secret DATABASE_URL=your-url
-fly deploy
+flyctl secrets set SUPABASE_URL=... SUPABASE_JWT_SECRET=... DATABASE_URL=...
+flyctl deploy
 ```
 
 ### 6.3 Check logs
 
 ```bash
-fly logs
+flyctl logs --app ivelox-core
 ```
 
 ---
@@ -254,9 +253,9 @@ jobs:
 
 ---
 
-## 8. Recommended: Railway (Phase B) → Fly.io (Phase C)
+## 8. Platform Recommendation
 
 | Phase | Platform | Cost | Why |
 |---|---|---|---|
-| B (friends) | Railway | Free/$5 | Zero config, auto-deploy from GitHub |
-| C (public) | Fly.io | ~$5-10/month | More control, multi-region, Docker-based |
+| Early (friends/beta) | Railway | Free/$5 | Zero config, auto-deploy from GitHub |
+| Production | Fly.io | ~$5-10/month | More control, multi-region, Docker-based |

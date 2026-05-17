@@ -2,6 +2,7 @@
 *.env.local
 bin/
 tmp/
+financial/
 
 # Agent skills (local tooling, not project code)
 claude/skills/
