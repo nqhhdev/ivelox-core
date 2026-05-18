@@ -2,10 +2,27 @@ package http
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/nqhhdev/ivelox-core/internal/usecase"
 )
+
+// authError maps known error messages to HTTP status codes.
+func authError(c *gin.Context, err error) {
+	msg := err.Error()
+	switch {
+	case strings.Contains(msg, "too many requests"):
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": msg})
+	case strings.Contains(strings.ToLower(msg), "invalid credentials"),
+		strings.Contains(strings.ToLower(msg), "invalid login"),
+		strings.Contains(strings.ToLower(msg), "invalid refresh"),
+		strings.Contains(strings.ToLower(msg), "email not confirmed"):
+		c.JSON(http.StatusUnauthorized, gin.H{"error": msg})
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": msg})
+	}
+}
 
 type AuthHandler struct {
 	authUC *usecase.AuthUsecase
@@ -68,7 +85,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 
 	result, err := h.authUC.Register(req.Email, req.Password)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		authError(c, err)
 		return
 	}
 
@@ -102,7 +119,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	result, err := h.authUC.Login(req.Email, req.Password)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		authError(c, err)
 		return
 	}
 
@@ -135,7 +152,7 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 
 	result, err := h.authUC.Refresh(req.RefreshToken)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		authError(c, err)
 		return
 	}
 
