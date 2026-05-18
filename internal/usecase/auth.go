@@ -78,13 +78,17 @@ func (u *AuthUsecase) Register(email, password string) (*domain.AuthResult, erro
 	if err != nil {
 		return nil, fmt.Errorf("invalid user id from auth provider: %w", err)
 	}
-	profile := &domain.User{
-		ID:       userID,
-		Email:    result.Email,
-		Provider: "email",
-	}
-	if err := u.userRepo.Upsert(profile); err != nil {
-		return nil, fmt.Errorf("upsert profile: %w", err)
+	// Skip profile upsert when email confirmation is required —
+	// profile will be created on first /auth/verify after confirmation.
+	if !result.NeedsVerification {
+		profile := &domain.User{
+			ID:       userID,
+			Email:    result.Email,
+			Provider: "email",
+		}
+		if err := u.userRepo.Upsert(profile); err != nil {
+			return nil, fmt.Errorf("upsert profile: %w", err)
+		}
 	}
 	return result, nil
 }

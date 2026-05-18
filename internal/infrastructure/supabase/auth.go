@@ -43,6 +43,9 @@ type authResponse struct {
 	AccessToken  string   `json:"access_token"`
 	RefreshToken string   `json:"refresh_token"`
 	User         authUser `json:"user"`
+	// Supabase signup with email confirmation enabled returns id/email at root level
+	ID    string `json:"id"`
+	Email string `json:"email"`
 }
 
 type authUser struct {
@@ -61,11 +64,22 @@ func (c *AuthClient) SignUp(email, password string) (*domain.AuthResult, error) 
 	if err != nil {
 		return nil, err
 	}
+	// When email confirmation is enabled, Supabase returns id/email at root level
+	// and access_token is empty. When disabled, they are inside user{}.
+	userID := r.User.ID
+	if userID == "" {
+		userID = r.ID
+	}
+	userEmail := r.User.Email
+	if userEmail == "" {
+		userEmail = r.Email
+	}
 	return &domain.AuthResult{
-		AccessToken:  r.AccessToken,
-		RefreshToken: r.RefreshToken,
-		UserID:       r.User.ID,
-		Email:        r.User.Email,
+		AccessToken:       r.AccessToken,
+		RefreshToken:      r.RefreshToken,
+		UserID:            userID,
+		Email:             userEmail,
+		NeedsVerification: r.AccessToken == "",
 	}, nil
 }
 
