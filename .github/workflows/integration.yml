@@ -1,0 +1,69 @@
+name: Integration Tests
+
+on:
+  pull_request:
+    branches: ["main"]
+  push:
+    branches: ["main"]
+
+jobs:
+  integration:
+    name: Integration Tests (Supabase Branch)
+    runs-on: ubuntu-latest
+
+    env:
+      SUPABASE_PROJECT_ID: zvcpgyzwmwwmredwzgcy
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache: true
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Create Supabase branch
+        id: branch
+        run: |
+          BRANCH_NAME="ci-${{ github.run_id }}"
+          supabase branches create "$BRANCH_NAME" \
+            --project-ref $SUPABASE_PROJECT_ID \
+            --experimental
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Get branch DB URL
+        id: db
+        run: |
+          DB_URL=$(supabase branches get "${{ steps.branch.outputs.branch_name }}" \
+            --project-ref $SUPABASE_PROJECT_ID \
+            --experimental \
+            --json | jq -r '.db_url')
+          echo "url=$DB_URL" >> $GITHUB_OUTPUT
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Run integration tests
+        run: go test -tags integration ./tests/integration/... -v -count=1
+        env:
+          DATABASE_URL: ${{ steps.db.outputs.url }}
+          SUPABASE_URL: https://zvcpgyzwmwwmredwzgcy.supabase.co
+          SUPABASE_JWT_SECRET: ${{ secrets.SUPABASE_JWT_SECRET }}
+          PORT: "8080"
+          FRONTEND_URL: "http://localhost:5173"
+
+      - name: Delete Supabase branch
+        if: always()
+        run: |
+          supabase branches delete "${{ steps.branch.outputs.branch_name }}" \
+            --project-ref $SUPABASE_PROJECT_ID \
+            --experimental
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}

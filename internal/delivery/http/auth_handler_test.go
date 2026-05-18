@@ -42,19 +42,22 @@ func makeTestToken(userID uuid.UUID) string {
 	return signed
 }
 
-func TestVerifyHandler_ReturnsProfile(t *testing.T) {
+func setupAuthRouter(repo domain.UserRepository) *gin.Engine {
 	gin.SetMode(gin.TestMode)
+	uc := usecase.NewAuthUsecase(repo)
+	handler := httpdelivery.NewAuthHandler(uc)
+	r := gin.New()
+	r.Use(middleware.Auth(secret))
+	r.POST("/api/v1/auth/verify", handler.Verify)
+	return r
+}
 
+func TestVerifyHandler_ReturnsProfile(t *testing.T) {
 	userID := uuid.New()
 	repo := &fakeUserRepo{users: map[uuid.UUID]*domain.User{
 		userID: {ID: userID, DisplayName: "Test User", Role: "user"},
 	}}
-	uc := usecase.NewAuthUsecase(repo)
-	handler := httpdelivery.NewAuthHandler(uc)
-
-	r := gin.New()
-	r.Use(middleware.Auth(secret))
-	r.POST("/api/v1/auth/verify", handler.Verify)
+	r := setupAuthRouter(repo)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/verify", nil)
 	req.Header.Set("Authorization", "Bearer "+makeTestToken(userID))
@@ -69,5 +72,33 @@ func TestVerifyHandler_ReturnsProfile(t *testing.T) {
 	json.Unmarshal(w.Body.Bytes(), &body)
 	if body["display_name"] != "Test User" {
 		t.Errorf("expected display_name 'Test User', got %v", body["display_name"])
+	}
+}
+
+func TestVerifyHandler_UserNotFound(t *testing.T) {
+	repo := &fakeUserRepo{users: map[uuid.UUID]*domain.User{}}
+	r := setupAuthRouter(repo)
+
+	userID := uuid.New()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/verify", nil)
+	req.Header.Set("Authorization", "Bearer "+makeTestToken(userID))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 404 {
+		t.Fatalf("expected 404, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestVerifyHandler_MissingToken(t *testing.T) {
+	repo := &fakeUserRepo{users: map[uuid.UUID]*domain.User{}}
+	r := setupAuthRouter(repo)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/verify", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 401 {
+		t.Fatalf("expected 401, got %d: %s", w.Code, w.Body.String())
 	}
 }
