@@ -17,7 +17,8 @@ func authError(c *gin.Context, err error) {
 	case strings.Contains(strings.ToLower(msg), "invalid credentials"),
 		strings.Contains(strings.ToLower(msg), "invalid login"),
 		strings.Contains(strings.ToLower(msg), "invalid refresh"),
-		strings.Contains(strings.ToLower(msg), "email not confirmed"):
+		strings.Contains(strings.ToLower(msg), "email not confirmed"),
+		strings.Contains(strings.ToLower(msg), "authentication error"):
 		c.JSON(http.StatusUnauthorized, gin.H{"error": msg})
 	case strings.Contains(strings.ToLower(msg), "password must"),
 		strings.Contains(strings.ToLower(msg), "invalid request"),
