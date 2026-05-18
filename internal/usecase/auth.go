@@ -19,7 +19,7 @@ var emailRe = regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
 //   - At least 1 special character (!@#$%^&* etc.)
 func validatePassword(p string) error {
 	if len(p) < 8 {
-		return fmt.Errorf("password must be at least 8 characters")
+		return fmt.Errorf("Password must be at least 8 characters")
 	}
 	var hasUpper, hasLower, hasDigit, hasSpecial bool
 	for _, c := range p {
@@ -35,16 +35,16 @@ func validatePassword(p string) error {
 		}
 	}
 	if !hasUpper {
-		return fmt.Errorf("password must contain at least one uppercase letter")
+		return fmt.Errorf("Password must contain at least one uppercase letter")
 	}
 	if !hasLower {
-		return fmt.Errorf("password must contain at least one lowercase letter")
+		return fmt.Errorf("Password must contain at least one lowercase letter")
 	}
 	if !hasDigit {
-		return fmt.Errorf("password must contain at least one number")
+		return fmt.Errorf("Password must contain at least one number")
 	}
 	if !hasSpecial {
-		return fmt.Errorf("password must contain at least one special character")
+		return fmt.Errorf("Password must contain at least one special character")
 	}
 	return nil
 }

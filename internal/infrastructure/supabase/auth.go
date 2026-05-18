@@ -164,13 +164,13 @@ func (c *AuthClient) post(path string, body any) (*authResponse, error) {
 		}
 		switch resp.StatusCode {
 		case http.StatusTooManyRequests:
-			return nil, fmt.Errorf("too many requests, please try again later")
+			return nil, fmt.Errorf("Too many requests, please try again later")
 		case http.StatusUnauthorized:
-			return nil, fmt.Errorf("invalid credentials")
+			return nil, fmt.Errorf("Invalid credentials")
 		case http.StatusUnprocessableEntity:
-			return nil, fmt.Errorf("invalid request data")
+			return nil, fmt.Errorf("Invalid request data")
 		default:
-			return nil, fmt.Errorf("supabase auth error %d", resp.StatusCode)
+			return nil, fmt.Errorf("Authentication error (%d)", resp.StatusCode)
 		}
 	}
 

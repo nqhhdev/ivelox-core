@@ -12,7 +12,7 @@ import (
 func authError(c *gin.Context, err error) {
 	msg := err.Error()
 	switch {
-	case strings.Contains(msg, "too many requests"):
+	case strings.Contains(strings.ToLower(msg), "too many requests"):
 		c.JSON(http.StatusTooManyRequests, gin.H{"error": msg})
 	case strings.Contains(strings.ToLower(msg), "invalid credentials"),
 		strings.Contains(strings.ToLower(msg), "invalid login"),
