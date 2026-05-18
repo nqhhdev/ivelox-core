@@ -8,6 +8,9 @@ Companion frontend: https://github.com/nqhhdev/ivelox-app
 - Author: nqhhdev <nqhh.dev@gmail.com> — always, no exceptions
 - Never add `Co-Authored-By` in commit messages
 - Never commit `.env`
+- Never push directly to `main` — always create a feature branch and open a PR
+- Branch naming: `feature/<short-description>`, `fix/<short-description>`, `chore/<short-description>`
+- PR required for all changes to `main`, no exceptions
 
 ## Architecture — Clean Architecture (strict)
 ```
