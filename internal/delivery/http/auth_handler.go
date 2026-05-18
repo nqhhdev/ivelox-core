@@ -175,8 +175,8 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 // Request / Response types
 
 type RegisterRequest struct {
-	Email    string `json:"email"    binding:"required,email" example:"user@example.com"`
-	Password string `json:"password" binding:"required,min=6"  example:"secret123"`
+	Email    string `json:"email"    binding:"required,email"   example:"user@example.com"`
+	Password string `json:"password" binding:"required,min=8"   example:"Secret123"`
 }
 
 type LoginRequest struct {

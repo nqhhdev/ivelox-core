@@ -155,6 +155,36 @@ func TestAuthRegister_WeakPassword(t *testing.T) {
 	}
 }
 
+// TestAuthRegister_NoUppercase: password missing uppercase → 400.
+func TestAuthRegister_NoUppercase(t *testing.T) {
+	r := newTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register",
+		jsonBody(map[string]string{"email": uniqueEmail(), "password": "abc12345"}))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 400 {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// TestAuthRegister_NoDigit: password missing digit → 400.
+func TestAuthRegister_NoDigit(t *testing.T) {
+	r := newTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register",
+		jsonBody(map[string]string{"email": uniqueEmail(), "password": "Abcdefgh"}))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 400 {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
 // --- Login ---
 
 // TestAuthLogin_InvalidCredentials: wrong password → 401.

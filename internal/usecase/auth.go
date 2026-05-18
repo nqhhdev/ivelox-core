@@ -2,10 +2,42 @@ package usecase
 
 import (
 	"fmt"
+	"regexp"
+	"unicode"
 
 	"github.com/google/uuid"
 	"github.com/nqhhdev/ivelox-core/internal/domain"
 )
+
+var emailRe = regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
+
+// validatePassword enforces: min 8 chars, at least 1 uppercase, 1 lowercase, 1 digit.
+func validatePassword(p string) error {
+	if len(p) < 8 {
+		return fmt.Errorf("password must be at least 8 characters")
+	}
+	var hasUpper, hasLower, hasDigit bool
+	for _, c := range p {
+		switch {
+		case unicode.IsUpper(c):
+			hasUpper = true
+		case unicode.IsLower(c):
+			hasLower = true
+		case unicode.IsDigit(c):
+			hasDigit = true
+		}
+	}
+	if !hasUpper {
+		return fmt.Errorf("password must contain at least one uppercase letter")
+	}
+	if !hasLower {
+		return fmt.Errorf("password must contain at least one lowercase letter")
+	}
+	if !hasDigit {
+		return fmt.Errorf("password must contain at least one number")
+	}
+	return nil
+}
 
 type AuthUsecase struct {
 	userRepo     domain.UserRepository
@@ -25,6 +57,9 @@ func (u *AuthUsecase) GetProfile(userIDStr string) (*domain.User, error) {
 }
 
 func (u *AuthUsecase) Register(email, password string) (*domain.AuthResult, error) {
+	if err := validatePassword(password); err != nil {
+		return nil, err
+	}
 	result, err := u.authProvider.SignUp(email, password)
 	if err != nil {
 		return nil, err
