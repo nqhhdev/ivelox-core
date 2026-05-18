@@ -1,0 +1,120 @@
+package supabase
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+
+	"github.com/nqhhdev/ivelox-core/internal/domain"
+)
+
+// AuthClient wraps the Supabase Auth REST API.
+type AuthClient struct {
+	baseURL string
+	anonKey string
+	client  *http.Client
+}
+
+func NewAuthClient(supabaseURL, anonKey string) *AuthClient {
+	return &AuthClient{
+		baseURL: supabaseURL,
+		anonKey: anonKey,
+		client:  &http.Client{},
+	}
+}
+
+type SignUpRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+type SignInRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+type authResponse struct {
+	AccessToken  string   `json:"access_token"`
+	RefreshToken string   `json:"refresh_token"`
+	User         authUser `json:"user"`
+}
+
+type authUser struct {
+	ID    string `json:"id"`
+	Email string `json:"email"`
+}
+
+type authError struct {
+	Message string `json:"message"`
+	Code    string `json:"error_code"`
+}
+
+// SignUp implements domain.AuthProvider.
+func (c *AuthClient) SignUp(email, password string) (*domain.AuthResult, error) {
+	r, err := c.post("/auth/v1/signup", SignUpRequest{Email: email, Password: password})
+	if err != nil {
+		return nil, err
+	}
+	return &domain.AuthResult{
+		AccessToken:  r.AccessToken,
+		RefreshToken: r.RefreshToken,
+		UserID:       r.User.ID,
+		Email:        r.User.Email,
+	}, nil
+}
+
+// SignIn implements domain.AuthProvider.
+func (c *AuthClient) SignIn(email, password string) (*domain.AuthResult, error) {
+	r, err := c.post("/auth/v1/token?grant_type=password", SignInRequest{Email: email, Password: password})
+	if err != nil {
+		return nil, err
+	}
+	return &domain.AuthResult{
+		AccessToken:  r.AccessToken,
+		RefreshToken: r.RefreshToken,
+		UserID:       r.User.ID,
+		Email:        r.User.Email,
+	}, nil
+}
+
+func (c *AuthClient) post(path string, body any) (*authResponse, error) {
+	b, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, c.baseURL+path, bytes.NewReader(b))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("apikey", c.anonKey)
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode >= 400 {
+		var e authError
+		_ = json.Unmarshal(raw, &e)
+		if e.Message != "" {
+			return nil, fmt.Errorf("%s", e.Message)
+		}
+		return nil, fmt.Errorf("supabase auth error %d", resp.StatusCode)
+	}
+
+	var result authResponse
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}

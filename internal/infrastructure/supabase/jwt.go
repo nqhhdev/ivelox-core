@@ -8,10 +8,23 @@ import (
 	"github.com/google/uuid"
 )
 
+type AppMetadata struct {
+	Provider  string   `json:"provider"`
+	Providers []string `json:"providers"`
+}
+
+type UserMetadata struct {
+	AvatarURL string `json:"avatar_url"`
+	FullName  string `json:"full_name"`
+	Name      string `json:"name"`
+}
+
 type Claims struct {
-	Sub   string `json:"sub"`
-	Email string `json:"email"`
-	Role  string `json:"role"`
+	Sub          string       `json:"sub"`
+	Email        string       `json:"email"`
+	Role         string       `json:"role"`
+	AppMetadata  AppMetadata  `json:"app_metadata"`
+	UserMetadata UserMetadata `json:"user_metadata"`
 	jwt.RegisteredClaims
 }
 

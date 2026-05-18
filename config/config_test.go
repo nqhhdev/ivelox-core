@@ -10,6 +10,7 @@ func TestLoad_WithEnvVars(t *testing.T) {
 	t.Setenv("PORT", "9090")
 	t.Setenv("FRONTEND_URL", "https://example.com")
 	t.Setenv("SUPABASE_URL", "https://test.supabase.co")
+	t.Setenv("SUPABASE_ANON_KEY", "test-anon-key")
 	t.Setenv("SUPABASE_JWT_SECRET", "test-secret")
 	t.Setenv("DATABASE_URL", "postgresql://localhost/test")
 
@@ -24,6 +25,9 @@ func TestLoad_WithEnvVars(t *testing.T) {
 	if cfg.SupabaseURL != "https://test.supabase.co" {
 		t.Errorf("expected SupabaseURL 'https://test.supabase.co', got %q", cfg.SupabaseURL)
 	}
+	if cfg.SupabaseAnonKey != "test-anon-key" {
+		t.Errorf("expected SupabaseAnonKey 'test-anon-key', got %q", cfg.SupabaseAnonKey)
+	}
 	if cfg.SupabaseJWTSecret != "test-secret" {
 		t.Errorf("expected SupabaseJWTSecret 'test-secret', got %q", cfg.SupabaseJWTSecret)
 	}
@@ -35,6 +39,7 @@ func TestLoad_WithEnvVars(t *testing.T) {
 func TestLoad_DefaultPort(t *testing.T) {
 	t.Setenv("PORT", "")
 	t.Setenv("SUPABASE_URL", "https://test.supabase.co")
+	t.Setenv("SUPABASE_ANON_KEY", "test-anon-key")
 	t.Setenv("SUPABASE_JWT_SECRET", "test-secret")
 	t.Setenv("DATABASE_URL", "postgresql://localhost/test")
 
@@ -48,6 +53,7 @@ func TestLoad_DefaultPort(t *testing.T) {
 func TestLoad_DefaultFrontendURL(t *testing.T) {
 	t.Setenv("FRONTEND_URL", "")
 	t.Setenv("SUPABASE_URL", "https://test.supabase.co")
+	t.Setenv("SUPABASE_ANON_KEY", "test-anon-key")
 	t.Setenv("SUPABASE_JWT_SECRET", "test-secret")
 	t.Setenv("DATABASE_URL", "postgresql://localhost/test")
 

@@ -3,7 +3,10 @@
 package integration_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,9 +18,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	httpdelivery "github.com/nqhhdev/ivelox-core/internal/delivery/http"
+	"github.com/nqhhdev/ivelox-core/internal/infrastructure/supabase"
 	"github.com/nqhhdev/ivelox-core/internal/repository/postgres"
 	"github.com/nqhhdev/ivelox-core/internal/usecase"
 )
+
+// --- helpers ---
 
 func newTestPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
@@ -33,6 +39,27 @@ func newTestPool(t *testing.T) *pgxpool.Pool {
 	return pool
 }
 
+func newTestRouter(t *testing.T) *gin.Engine {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+
+	jwtSecret := os.Getenv("SUPABASE_JWT_SECRET")
+	if jwtSecret == "" {
+		t.Skip("SUPABASE_JWT_SECRET not set")
+	}
+	supabaseURL := os.Getenv("SUPABASE_URL")
+	anonKey := os.Getenv("SUPABASE_ANON_KEY")
+	if supabaseURL == "" || anonKey == "" {
+		t.Skip("SUPABASE_URL or SUPABASE_ANON_KEY not set")
+	}
+
+	pool := newTestPool(t)
+	userRepo := postgres.NewUserRepository(pool)
+	authClient := supabase.NewAuthClient(supabaseURL, anonKey)
+	uc := usecase.NewAuthUsecase(userRepo, authClient)
+	return httpdelivery.NewRouter("http://localhost:5173", jwtSecret, uc)
+}
+
 func makeIntegrationToken(userID uuid.UUID, secret string) string {
 	claims := jwt.MapClaims{
 		"sub":   userID.String(),
@@ -44,30 +71,206 @@ func makeIntegrationToken(userID uuid.UUID, secret string) string {
 	return signed
 }
 
-func TestAuthVerify_RealDB_UserNotFound(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	pool := newTestPool(t)
+func jsonBody(v any) *bytes.Buffer {
+	b, _ := json.Marshal(v)
+	return bytes.NewBuffer(b)
+}
 
-	jwtSecret := os.Getenv("SUPABASE_JWT_SECRET")
-	if jwtSecret == "" {
-		t.Skip("SUPABASE_JWT_SECRET not set")
+// uniqueEmail generates a unique email per test run to avoid Supabase duplicate conflicts.
+func uniqueEmail() string {
+	return fmt.Sprintf("test+%d@ivelox-integration.com", time.Now().UnixNano())
+}
+
+// --- Register ---
+
+// TestAuthRegister_NewUser: new unique email → 201 + access_token + user_id.
+func TestAuthRegister_NewUser(t *testing.T) {
+	r := newTestRouter(t)
+
+	email := uniqueEmail()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register",
+		jsonBody(map[string]string{"email": email, "password": "TestPass123!"}))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 201 {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp map[string]any
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp["access_token"] == nil || resp["access_token"] == "" {
+		t.Error("expected access_token in response")
+	}
+	if resp["user_id"] == nil || resp["user_id"] == "" {
+		t.Error("expected user_id in response")
+	}
+	if resp["email"] != email {
+		t.Errorf("expected email %q, got %v", email, resp["email"])
+	}
+}
+
+// TestAuthRegister_MissingPassword: omit password → 400.
+func TestAuthRegister_MissingPassword(t *testing.T) {
+	r := newTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register",
+		jsonBody(map[string]string{"email": uniqueEmail()}))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 400 {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// TestAuthRegister_InvalidEmail: malformed email → 400.
+func TestAuthRegister_InvalidEmail(t *testing.T) {
+	r := newTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register",
+		jsonBody(map[string]string{"email": "not-an-email", "password": "TestPass123!"}))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 400 {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// TestAuthRegister_WeakPassword: password too short → 400.
+func TestAuthRegister_WeakPassword(t *testing.T) {
+	r := newTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register",
+		jsonBody(map[string]string{"email": uniqueEmail(), "password": "123"}))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 400 {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// --- Login ---
+
+// TestAuthLogin_InvalidCredentials: wrong password → 401.
+func TestAuthLogin_InvalidCredentials(t *testing.T) {
+	r := newTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login",
+		jsonBody(map[string]string{"email": "nonexistent@ivelox-integration.com", "password": "wrongpass"}))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 401 {
+		t.Fatalf("expected 401, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// TestAuthLogin_MissingBody: empty body → 400.
+func TestAuthLogin_MissingBody(t *testing.T) {
+	r := newTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString("{}"))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 400 {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// TestAuthRegisterThenLogin: full flow — register → login → get tokens.
+func TestAuthRegisterThenLogin(t *testing.T) {
+	r := newTestRouter(t)
+	email := uniqueEmail()
+	password := "TestPass123!"
+
+	// Step 1: register
+	regReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register",
+		jsonBody(map[string]string{"email": email, "password": password}))
+	regReq.Header.Set("Content-Type", "application/json")
+	regW := httptest.NewRecorder()
+	r.ServeHTTP(regW, regReq)
+
+	if regW.Code != 201 {
+		t.Fatalf("register: expected 201, got %d: %s", regW.Code, regW.Body.String())
 	}
 
-	userRepo := postgres.NewUserRepository(pool)
-	uc := usecase.NewAuthUsecase(userRepo)
-	r := httpdelivery.NewRouter("http://localhost:5173", jwtSecret, uc)
+	// Step 2: login — Supabase requires email confirmation by default.
+	// If email confirmation is disabled in project settings, this returns 200.
+	// Otherwise expects 400 ("Email not confirmed").
+	loginReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login",
+		jsonBody(map[string]string{"email": email, "password": password}))
+	loginReq.Header.Set("Content-Type", "application/json")
+	loginW := httptest.NewRecorder()
+	r.ServeHTTP(loginW, loginReq)
 
-	// Use a random UUID that doesn't exist in DB
-	unknownID := uuid.New()
-	token := makeIntegrationToken(unknownID, jwtSecret)
+	if loginW.Code != 200 && loginW.Code != 400 {
+		t.Fatalf("login: expected 200 or 400 (unconfirmed), got %d: %s", loginW.Code, loginW.Body.String())
+	}
+
+	if loginW.Code == 200 {
+		var resp map[string]any
+		json.Unmarshal(loginW.Body.Bytes(), &resp)
+		if resp["access_token"] == nil || resp["access_token"] == "" {
+			t.Error("expected access_token in login response")
+		}
+		t.Logf("login successful, onboarding_step=%v", resp["onboarding_step"])
+	} else {
+		t.Logf("login returned 400 — email confirmation likely required in Supabase settings")
+	}
+}
+
+// --- Verify ---
+
+// TestAuthVerify_NoToken: missing Authorization header → 401.
+func TestAuthVerify_NoToken(t *testing.T) {
+	r := newTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/verify", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 401 {
+		t.Fatalf("expected 401, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// TestAuthVerify_InvalidToken: garbage token → 401.
+func TestAuthVerify_InvalidToken(t *testing.T) {
+	r := newTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/verify", nil)
+	req.Header.Set("Authorization", "Bearer not.a.valid.jwt")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 401 {
+		t.Fatalf("expected 401, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// TestAuthVerify_ValidTokenUnknownUser: valid JWT signature for user not yet in profiles → 200.
+// Verify upserts the profile (handles Google OAuth first-time login).
+func TestAuthVerify_ValidTokenUnknownUser(t *testing.T) {
+	r := newTestRouter(t)
+
+	jwtSecret := os.Getenv("SUPABASE_JWT_SECRET")
+	token := makeIntegrationToken(uuid.New(), jwtSecret)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/verify", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	// Should return 404 since user doesn't exist in profiles table
-	if w.Code != 404 {
-		t.Fatalf("expected 404 for unknown user, got %d: %s", w.Code, w.Body.String())
+	if w.Code != 200 {
+		t.Fatalf("expected 200 (upsert creates new user), got %d: %s", w.Code, w.Body.String())
 	}
 }

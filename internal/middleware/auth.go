@@ -22,8 +22,21 @@ func Auth(jwtSecret string) gin.HandlerFunc {
 			return
 		}
 
+		provider := claims.AppMetadata.Provider
+		if provider == "" {
+			provider = "email"
+		}
+		avatarURL := claims.UserMetadata.AvatarURL
+		displayName := claims.UserMetadata.FullName
+		if displayName == "" {
+			displayName = claims.UserMetadata.Name
+		}
+
 		c.Set("userID", claims.Sub)
 		c.Set("userEmail", claims.Email)
+		c.Set("userProvider", provider)
+		c.Set("userAvatarURL", avatarURL)
+		c.Set("userDisplayName", displayName)
 		c.Next()
 	}
 }

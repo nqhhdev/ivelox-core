@@ -1,3 +1,12 @@
+// @title           iVelox API
+// @version         1.0
+// @description     IELTS learning platform API
+// @host            localhost:8080
+// @BasePath        /api/v1
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description Type "Bearer " followed by your Supabase JWT token
 package main
 
 import (
@@ -8,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nqhhdev/ivelox-core/config"
 	httpdelivery "github.com/nqhhdev/ivelox-core/internal/delivery/http"
+	"github.com/nqhhdev/ivelox-core/internal/infrastructure/supabase"
 	"github.com/nqhhdev/ivelox-core/internal/repository/postgres"
 	"github.com/nqhhdev/ivelox-core/internal/usecase"
 )
@@ -22,7 +32,8 @@ func main() {
 	defer db.Close()
 
 	userRepo := postgres.NewUserRepository(db)
-	authUC := usecase.NewAuthUsecase(userRepo)
+	authClient := supabase.NewAuthClient(cfg.SupabaseURL, cfg.SupabaseAnonKey)
+	authUC := usecase.NewAuthUsecase(userRepo, authClient)
 
 	router := httpdelivery.NewRouter(cfg.FrontendURL, cfg.SupabaseJWTSecret, authUC)
 

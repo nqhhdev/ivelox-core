@@ -54,10 +54,13 @@ ivelox-core/
 │
 ├── internal/
 │   ├── domain/                  # Pure Go structs + interfaces (no external imports)
-│   │   ├── user.go              # User struct, UserRepository interface
-│   │   ├── exam.go              # (to be added) Exam, Section structs
-│   │   ├── practice.go          # (to be added) Session, Answer structs
-│   │   └── repository.go        # All repository interfaces in one place
+│   │   ├── user.go              # User, UserGoal, UserLevel, UserScore, UserStreak + repo interfaces
+│   │   ├── exam.go              # Exam, Section, Question, Translation structs
+│   │   ├── practice.go          # PracticeSession, Answer structs
+│   │   ├── progress.go          # ProgressSnapshot struct
+│   │   ├── tip.go               # Tip struct
+│   │   └── repository.go        # ExamRepo, SectionRepo, QuestionRepo, TranslationRepo,
+│   │                            #   PracticeSessionRepo, AnswerRepo, ProgressSnapshotRepo, TipRepo
 │   │
 │   ├── usecase/                 # Business logic — imports domain only
 │   │   ├── auth.go              # GetProfile(userID) → domain.User
@@ -167,12 +170,58 @@ GROQ_API_KEY=
 DEEPL_API_KEY=
 ```
 
-## Current State (Foundation complete)
+## Database Schema
+
+### User tables
+| Table | Purpose |
+|---|---|
+| `profiles` | Basic info: display_name, email, avatar_url, provider, role |
+| `user_goals` | Per-skill target band + date (set at onboarding, updatable) |
+| `user_levels` | Current band per skill — seeded from onboarding quick test, upserted after sessions |
+| `user_scores` | Append-only score history per session per skill (for charts) |
+| `user_streaks` | Daily study streak + last_reminded_at (for push reminders) |
+
+### Content tables (admin-managed)
+| Table | Purpose |
+|---|---|
+| `exams` | Exam metadata (skill, difficulty, source) |
+| `sections` | Passages / audio per exam |
+| `questions` | MCQ, fill_blank, true_false, matching, short_answer |
+| `translations` | Pre-computed DeepL translations per section per lang |
+| `tips` | Study tips per skill and band range |
+
+### Session tables (user-generated)
+| Table | Purpose |
+|---|---|
+| `practice_sessions` | One session per exam attempt |
+| `answers` | User answers with AI score/feedback |
+| `progress_snapshots` | Legacy aggregate snapshots (superseded by user_scores) |
+
+## Auth Flow
+```
+Email/password + Google OAuth → handled by Supabase Auth (client SDK)
+Backend never receives raw passwords.
+
+1. Frontend sends: Authorization: Bearer <supabase-jwt>
+2. middleware/auth.go → infrastructure/supabase/jwt.go → VerifyJWT()
+3. JWT valid → set c.Set("userID", claims.Sub)
+4. Handler reads userID → calls usecase → repository queries DB
+5. JWT invalid → 401 Unauthorized
+
+On first login: trigger auto-creates profiles row.
+Onboarding: user sets goals (user_goals) + takes quick test → user_levels seeded.
+```
+
+## Current State
 - [x] Go + Gin server with health endpoint
 - [x] Clean Architecture layers wired
 - [x] JWT middleware (tested)
 - [x] POST /api/v1/auth/verify (tested)
-- [x] profiles table in Supabase with RLS + auto-create trigger
+- [x] Full DB schema: all tables with RLS + indexes
+- [x] Domain structs + repository interfaces for all tables
+- [x] profiles extended (email, avatar_url, provider)
+- [x] user_goals, user_levels, user_scores, user_streaks tables
+- [ ] Onboarding endpoints (set goals, quick test → seed levels)
 - [ ] Swagger (swaggo)
 - [ ] Dockerfile + Fly.io deploy
 - [ ] exam, practice, progress, tips endpoints

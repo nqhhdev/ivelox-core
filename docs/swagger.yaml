@@ -1,0 +1,168 @@
+basePath: /api/v1
+definitions:
+  http.ErrorResponse:
+    properties:
+      error:
+        example: invalid request body
+        type: string
+    type: object
+  http.LoginRequest:
+    properties:
+      email:
+        example: user@example.com
+        type: string
+      password:
+        example: secret123
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  http.ProfileResponse:
+    properties:
+      avatar_url:
+        example: https://lh3.googleusercontent.com/...
+        type: string
+      display_name:
+        example: John Doe
+        type: string
+      email:
+        example: user@example.com
+        type: string
+      id:
+        example: 550e8400-e29b-41d4-a716-446655440000
+        type: string
+      provider:
+        example: google
+        type: string
+      role:
+        example: user
+        type: string
+    type: object
+  http.RegisterRequest:
+    properties:
+      email:
+        example: user@example.com
+        type: string
+      password:
+        example: secret123
+        minLength: 6
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  http.TokenResponse:
+    properties:
+      access_token:
+        example: eyJhbGci...
+        type: string
+      email:
+        example: user@example.com
+        type: string
+      needs_verification:
+        example: true
+        type: boolean
+      refresh_token:
+        example: eyJhbGci...
+        type: string
+      user_id:
+        example: 550e8400-e29b-41d4-a716-446655440000
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: IELTS learning platform API
+  title: iVelox API
+  version: "1.0"
+paths:
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Authenticates via Supabase Auth. Google OAuth users get JWT from
+        Supabase JS SDK directly — no login endpoint needed.
+      parameters:
+      - description: Login payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/http.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/http.TokenResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/http.ErrorResponse'
+      summary: Login with email and password
+      tags:
+      - auth
+  /auth/register:
+    post:
+      consumes:
+      - application/json
+      description: Creates a new account via Supabase Auth (email/password). Returns
+        needs_verification=true — user must confirm email before logging in.
+      parameters:
+      - description: Register payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/http.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/http.TokenResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/http.ErrorResponse'
+      summary: Register a new user
+      tags:
+      - auth
+  /auth/verify:
+    post:
+      description: Validates Supabase JWT, upserts user profile (works for email +
+        Google OAuth), returns profile
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/http.ProfileResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/http.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Verify JWT and sync profile
+      tags:
+      - auth
+securityDefinitions:
+  BearerAuth:
+    description: Type "Bearer " followed by your Supabase JWT token
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

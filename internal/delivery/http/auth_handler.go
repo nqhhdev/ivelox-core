@@ -1,6 +1,8 @@
 package http
 
 import (
+	"net/http"
+
 	"github.com/gin-gonic/gin"
 	"github.com/nqhhdev/ivelox-core/internal/usecase"
 )
@@ -13,16 +15,134 @@ func NewAuthHandler(authUC *usecase.AuthUsecase) *AuthHandler {
 	return &AuthHandler{authUC: authUC}
 }
 
+// Verify godoc
+//
+//	@Summary		Verify JWT and sync profile
+//	@Description	Validates Supabase JWT, upserts user profile (works for email + Google OAuth), returns profile
+//	@Tags			auth
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Success		200	{object}	ProfileResponse
+//	@Failure		401	{object}	ErrorResponse
+//	@Failure		500	{object}	ErrorResponse
+//	@Router			/auth/verify [post]
 func (h *AuthHandler) Verify(c *gin.Context) {
-	userID := c.GetString("userID")
-	user, err := h.authUC.GetProfile(userID)
+	user, err := h.authUC.UpsertFromJWT(
+		c.GetString("userID"),
+		c.GetString("userEmail"),
+		c.GetString("userProvider"),
+		c.GetString("userAvatarURL"),
+		c.GetString("userDisplayName"),
+	)
 	if err != nil {
-		c.JSON(404, gin.H{"error": "profile not found"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to sync profile"})
 		return
 	}
-	c.JSON(200, gin.H{
-		"id":           user.ID,
-		"display_name": user.DisplayName,
-		"role":         user.Role,
+	c.JSON(http.StatusOK, ProfileResponse{
+		ID:          user.ID.String(),
+		Email:       user.Email,
+		DisplayName: user.DisplayName,
+		AvatarURL:   user.AvatarURL,
+		Provider:    user.Provider,
+		Role:        user.Role,
 	})
+}
+
+// Register godoc
+//
+//	@Summary		Register a new user
+//	@Description	Creates a new account via Supabase Auth (email/password). Returns needs_verification=true — user must confirm email before logging in.
+//	@Tags			auth
+//	@Accept			json
+//	@Produce		json
+//	@Param			body	body		RegisterRequest	true	"Register payload"
+//	@Success		201		{object}	TokenResponse
+//	@Failure		400		{object}	ErrorResponse
+//	@Router			/auth/register [post]
+func (h *AuthHandler) Register(c *gin.Context) {
+	var req RegisterRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+
+	result, err := h.authUC.Register(req.Email, req.Password)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, TokenResponse{
+		AccessToken:       result.AccessToken,
+		RefreshToken:      result.RefreshToken,
+		UserID:            result.UserID,
+		Email:             result.Email,
+		NeedsVerification: result.NeedsVerification,
+	})
+}
+
+// Login godoc
+//
+//	@Summary		Login with email and password
+//	@Description	Authenticates via Supabase Auth. Google OAuth users get JWT from Supabase JS SDK directly — no login endpoint needed.
+//	@Tags			auth
+//	@Accept			json
+//	@Produce		json
+//	@Param			body	body		LoginRequest	true	"Login payload"
+//	@Success		200		{object}	TokenResponse
+//	@Failure		400		{object}	ErrorResponse
+//	@Failure		401		{object}	ErrorResponse
+//	@Router			/auth/login [post]
+func (h *AuthHandler) Login(c *gin.Context) {
+	var req LoginRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+
+	result, err := h.authUC.Login(req.Email, req.Password)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, TokenResponse{
+		AccessToken:  result.AccessToken,
+		RefreshToken: result.RefreshToken,
+		UserID:       result.UserID,
+		Email:        result.Email,
+	})
+}
+
+// Request / Response types
+
+type RegisterRequest struct {
+	Email    string `json:"email"    binding:"required,email" example:"user@example.com"`
+	Password string `json:"password" binding:"required,min=6"  example:"secret123"`
+}
+
+type LoginRequest struct {
+	Email    string `json:"email"    binding:"required,email" example:"user@example.com"`
+	Password string `json:"password" binding:"required"        example:"secret123"`
+}
+
+type TokenResponse struct {
+	AccessToken       string `json:"access_token"        example:"eyJhbGci..."`
+	RefreshToken      string `json:"refresh_token"       example:"eyJhbGci..."`
+	UserID            string `json:"user_id"             example:"550e8400-e29b-41d4-a716-446655440000"`
+	Email             string `json:"email"               example:"user@example.com"`
+	NeedsVerification bool   `json:"needs_verification"  example:"true"`
+}
+
+type ProfileResponse struct {
+	ID          string `json:"id"           example:"550e8400-e29b-41d4-a716-446655440000"`
+	Email       string `json:"email"        example:"user@example.com"`
+	DisplayName string `json:"display_name" example:"John Doe"`
+	AvatarURL   string `json:"avatar_url"   example:"https://lh3.googleusercontent.com/..."`
+	Provider    string `json:"provider"     example:"google"`
+	Role        string `json:"role"         example:"user"`
+}
+
+type ErrorResponse struct {
+	Error string `json:"error" example:"invalid request body"`
 }
