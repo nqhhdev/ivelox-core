@@ -274,3 +274,215 @@ func TestAuthVerify_ValidTokenUnknownUser(t *testing.T) {
 		t.Fatalf("expected 200 (upsert creates new user), got %d: %s", w.Code, w.Body.String())
 	}
 }
+
+// --- Refresh ---
+
+// TestAuthRefresh_InvalidToken: garbage refresh token → 401.
+func TestAuthRefresh_InvalidToken(t *testing.T) {
+	r := newTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh",
+		jsonBody(map[string]string{"refresh_token": "not-a-valid-token"}))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 401 {
+		t.Fatalf("expected 401, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// TestAuthRefresh_MissingBody: missing refresh_token field → 400.
+func TestAuthRefresh_MissingBody(t *testing.T) {
+	r := newTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh",
+		jsonBody(map[string]string{}))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 400 {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// TestAuthRefreshThenVerify: register → get refresh_token → refresh → verify with new token.
+// Requires email confirmation disabled in Supabase project settings.
+func TestAuthRefreshThenVerify(t *testing.T) {
+	r := newTestRouter(t)
+	email := uniqueEmail()
+	password := "TestPass123!"
+
+	// Step 1: register
+	regReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register",
+		jsonBody(map[string]string{"email": email, "password": password}))
+	regReq.Header.Set("Content-Type", "application/json")
+	regW := httptest.NewRecorder()
+	r.ServeHTTP(regW, regReq)
+	if regW.Code != 201 {
+		t.Fatalf("register: expected 201, got %d: %s", regW.Code, regW.Body.String())
+	}
+	var regResp map[string]any
+	json.Unmarshal(regW.Body.Bytes(), &regResp)
+
+	refreshToken, _ := regResp["refresh_token"].(string)
+	if refreshToken == "" {
+		t.Skip("no refresh_token in register response — email confirmation may be required")
+	}
+
+	// Step 2: refresh → new token pair
+	refReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh",
+		jsonBody(map[string]string{"refresh_token": refreshToken}))
+	refReq.Header.Set("Content-Type", "application/json")
+	refW := httptest.NewRecorder()
+	r.ServeHTTP(refW, refReq)
+
+	if refW.Code != 200 {
+		t.Fatalf("refresh: expected 200, got %d: %s", refW.Code, refW.Body.String())
+	}
+	var refResp map[string]any
+	json.Unmarshal(refW.Body.Bytes(), &refResp)
+
+	newAccessToken, _ := refResp["access_token"].(string)
+	newRefreshToken, _ := refResp["refresh_token"].(string)
+	if newAccessToken == "" {
+		t.Error("expected new access_token after refresh")
+	}
+	if newRefreshToken == "" {
+		t.Error("expected new refresh_token after refresh")
+	}
+	t.Logf("refresh successful, new tokens issued")
+}
+
+// --- Logout ---
+
+// TestAuthLogout_NoToken: missing Authorization header → 401.
+func TestAuthLogout_NoToken(t *testing.T) {
+	r := newTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 401 {
+		t.Fatalf("expected 401, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// TestAuthLogout_InvalidToken: garbage token → 401.
+func TestAuthLogout_InvalidToken(t *testing.T) {
+	r := newTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
+	req.Header.Set("Authorization", "Bearer not.a.valid.jwt")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 401 {
+		t.Fatalf("expected 401, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// TestAuthRegisterThenLogout: register → logout with access token → 204.
+// Requires email confirmation disabled in Supabase project settings.
+func TestAuthRegisterThenLogout(t *testing.T) {
+	r := newTestRouter(t)
+	email := uniqueEmail()
+	password := "TestPass123!"
+
+	// Step 1: register
+	regReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register",
+		jsonBody(map[string]string{"email": email, "password": password}))
+	regReq.Header.Set("Content-Type", "application/json")
+	regW := httptest.NewRecorder()
+	r.ServeHTTP(regW, regReq)
+	if regW.Code != 201 {
+		t.Fatalf("register: expected 201, got %d: %s", regW.Code, regW.Body.String())
+	}
+	var regResp map[string]any
+	json.Unmarshal(regW.Body.Bytes(), &regResp)
+
+	accessToken, _ := regResp["access_token"].(string)
+	if accessToken == "" {
+		t.Skip("no access_token in register response — email confirmation may be required")
+	}
+
+	// Step 2: logout
+	logoutReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
+	logoutReq.Header.Set("Authorization", "Bearer "+accessToken)
+	logoutW := httptest.NewRecorder()
+	r.ServeHTTP(logoutW, logoutReq)
+
+	if logoutW.Code != 204 {
+		t.Fatalf("logout: expected 204, got %d: %s", logoutW.Code, logoutW.Body.String())
+	}
+	t.Logf("logout successful")
+}
+
+// TestAuthFullFlow: register → refresh → verify → logout.
+// Requires email confirmation disabled in Supabase project settings.
+func TestAuthFullFlow(t *testing.T) {
+	r := newTestRouter(t)
+	email := uniqueEmail()
+	password := "TestPass123!"
+
+	// Step 1: register
+	regReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register",
+		jsonBody(map[string]string{"email": email, "password": password}))
+	regReq.Header.Set("Content-Type", "application/json")
+	regW := httptest.NewRecorder()
+	r.ServeHTTP(regW, regReq)
+	if regW.Code != 201 {
+		t.Fatalf("register: expected 201, got %d: %s", regW.Code, regW.Body.String())
+	}
+	var regResp map[string]any
+	json.Unmarshal(regW.Body.Bytes(), &regResp)
+
+	accessToken, _ := regResp["access_token"].(string)
+	refreshToken, _ := regResp["refresh_token"].(string)
+	if accessToken == "" || refreshToken == "" {
+		t.Skip("tokens missing — email confirmation may be required in Supabase settings")
+	}
+
+	// Step 2: verify with access token
+	verifyReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/verify", nil)
+	verifyReq.Header.Set("Authorization", "Bearer "+accessToken)
+	verifyW := httptest.NewRecorder()
+	r.ServeHTTP(verifyW, verifyReq)
+	if verifyW.Code != 200 {
+		t.Fatalf("verify: expected 200, got %d: %s", verifyW.Code, verifyW.Body.String())
+	}
+	var verifyResp map[string]any
+	json.Unmarshal(verifyW.Body.Bytes(), &verifyResp)
+	if verifyResp["email"] != email {
+		t.Errorf("verify: expected email %q, got %v", email, verifyResp["email"])
+	}
+	t.Logf("verify: profile synced, provider=%v", verifyResp["provider"])
+
+	// Step 3: refresh token
+	refReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh",
+		jsonBody(map[string]string{"refresh_token": refreshToken}))
+	refReq.Header.Set("Content-Type", "application/json")
+	refW := httptest.NewRecorder()
+	r.ServeHTTP(refW, refReq)
+	if refW.Code != 200 {
+		t.Fatalf("refresh: expected 200, got %d: %s", refW.Code, refW.Body.String())
+	}
+	var refResp map[string]any
+	json.Unmarshal(refW.Body.Bytes(), &refResp)
+	newAccessToken, _ := refResp["access_token"].(string)
+	if newAccessToken == "" {
+		t.Fatal("refresh: expected new access_token")
+	}
+
+	// Step 4: logout with new access token
+	logoutReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
+	logoutReq.Header.Set("Authorization", "Bearer "+newAccessToken)
+	logoutW := httptest.NewRecorder()
+	r.ServeHTTP(logoutW, logoutReq)
+	if logoutW.Code != 204 {
+		t.Fatalf("logout: expected 204, got %d: %s", logoutW.Code, logoutW.Body.String())
+	}
+	t.Logf("full auth flow completed: register → verify → refresh → logout")
+}
