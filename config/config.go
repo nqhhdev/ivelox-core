@@ -8,12 +8,12 @@ import (
 )
 
 type Config struct {
-	Port               string
-	FrontendURL        string
-	SupabaseURL        string
-	SupabaseAnonKey    string
-	SupabaseJWTSecret  string
-	DatabaseURL        string
+	Port              string
+	FrontendURL       string
+	SupabaseURL       string
+	SupabaseAnonKey   string
+	SupabaseJWTSecret string
+	DatabaseURL       string
 }
 
 func Load() *Config {

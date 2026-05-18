@@ -52,12 +52,12 @@ type UserScore struct {
 
 // UserStreak tracks daily study for reminder notifications.
 type UserStreak struct {
-	UserID          uuid.UUID
-	CurrentStreak   int
-	LongestStreak   int
-	LastStudyDate   *time.Time
-	LastRemindedAt  *time.Time
-	UpdatedAt       time.Time
+	UserID         uuid.UUID
+	CurrentStreak  int
+	LongestStreak  int
+	LastStudyDate  *time.Time
+	LastRemindedAt *time.Time
+	UpdatedAt      time.Time
 }
 
 type UserRepository interface {

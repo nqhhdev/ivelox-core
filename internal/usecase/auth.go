@@ -122,10 +122,10 @@ func (u *AuthUsecase) UpsertFromJWT(userIDStr, email, provider, avatarURL, displ
 	if err != nil {
 		// Profile doesn't exist yet (first Google login) — create fresh.
 		existing = &domain.User{
-			ID:       id,
-			Email:    email,
-			Provider: provider,
-			AvatarURL: avatarURL,
+			ID:          id,
+			Email:       email,
+			Provider:    provider,
+			AvatarURL:   avatarURL,
 			DisplayName: displayName,
 		}
 	} else {
