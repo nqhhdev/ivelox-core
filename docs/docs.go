@@ -137,7 +137,7 @@ const docTemplate = `{
         },
         "/auth/register": {
             "post": {
-                "description": "Creates a new account via Supabase Auth (email/password). Returns needs_verification=true — user must confirm email before logging in.",
+                "description": "Creates a new account via Supabase Auth (email/password). Password must be at least 8 characters and contain uppercase, lowercase, number, and special character. Returns needs_verification=true — user must confirm email before logging in.",
                 "consumes": [
                     "application/json"
                 ],
@@ -294,8 +294,8 @@ const docTemplate = `{
                 },
                 "password": {
                     "type": "string",
-                    "minLength": 6,
-                    "example": "secret123"
+                    "minLength": 8,
+                    "example": "Secret123!"
                 }
             }
         },

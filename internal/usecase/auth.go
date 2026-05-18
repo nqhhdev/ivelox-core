@@ -11,7 +11,12 @@ import (
 
 var emailRe = regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
 
-// validatePassword enforces: min 8 chars, at least 1 uppercase, 1 lowercase, 1 digit, 1 special char.
+// validatePassword enforces password strength:
+//   - At least 8 characters
+//   - At least 1 uppercase letter (A-Z)
+//   - At least 1 lowercase letter (a-z)
+//   - At least 1 digit (0-9)
+//   - At least 1 special character (!@#$%^&* etc.)
 func validatePassword(p string) error {
 	if len(p) < 8 {
 		return fmt.Errorf("password must be at least 8 characters")

@@ -53,8 +53,8 @@ definitions:
         example: user@example.com
         type: string
       password:
-        example: secret123
-        minLength: 6
+        example: Secret123!
+        minLength: 8
         type: string
     required:
     - email
@@ -169,8 +169,10 @@ paths:
     post:
       consumes:
       - application/json
-      description: Creates a new account via Supabase Auth (email/password). Returns
-        needs_verification=true — user must confirm email before logging in.
+      description: Creates a new account via Supabase Auth (email/password). Password
+        must be at least 8 characters and contain uppercase, lowercase, number, and
+        special character. Returns needs_verification=true — user must confirm email
+        before logging in.
       parameters:
       - description: Register payload
         in: body

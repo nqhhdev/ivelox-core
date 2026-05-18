@@ -51,7 +51,7 @@ func (h *AuthHandler) Verify(c *gin.Context) {
 // Register godoc
 //
 //	@Summary		Register a new user
-//	@Description	Creates a new account via Supabase Auth (email/password). Returns needs_verification=true — user must confirm email before logging in.
+//	@Description	Creates a new account via Supabase Auth (email/password). Password must be at least 8 characters and contain uppercase, lowercase, number, and special character. Returns needs_verification=true — user must confirm email before logging in.
 //	@Tags			auth
 //	@Accept			json
 //	@Produce		json
@@ -175,8 +175,8 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 // Request / Response types
 
 type RegisterRequest struct {
-	Email    string `json:"email"    binding:"required,email"   example:"user@example.com"`
-	Password string `json:"password" binding:"required,min=8"   example:"Secret123"`
+	Email    string `json:"email"    binding:"required,email" example:"user@example.com"`
+	Password string `json:"password" binding:"required,min=8" example:"Secret123!"`
 }
 
 type LoginRequest struct {
