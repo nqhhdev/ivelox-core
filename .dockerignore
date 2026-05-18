@@ -4,6 +4,6 @@ bin/
 tmp/
 .git/
 README.md
-docs/
+docs/*.md
 plans/
 .claude/

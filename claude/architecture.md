@@ -54,13 +54,16 @@ ivelox-core/
 │
 ├── internal/
 │   ├── domain/                  # Pure Go structs + interfaces (no external imports)
-│   │   ├── user.go              # User struct, UserRepository interface
-│   │   ├── exam.go              # (to be added) Exam, Section structs
-│   │   ├── practice.go          # (to be added) Session, Answer structs
-│   │   └── repository.go        # All repository interfaces in one place
+│   │   ├── user.go              # User, UserGoal, UserLevel, UserScore, UserStreak + repo interfaces
+│   │   ├── exam.go              # Exam, Section, Question, Translation structs
+│   │   ├── practice.go          # PracticeSession, Answer structs
+│   │   ├── progress.go          # ProgressSnapshot struct
+│   │   ├── tip.go               # Tip struct
+│   │   └── repository.go        # ExamRepo, SectionRepo, QuestionRepo, TranslationRepo,
+│   │                            #   PracticeSessionRepo, AnswerRepo, ProgressSnapshotRepo, TipRepo
 │   │
 │   ├── usecase/                 # Business logic — imports domain only
-│   │   ├── auth.go              # GetProfile(userID) → domain.User
+│   │   ├── auth.go              # Register, Login, Refresh, Logout, Verify, UpsertFromJWT
 │   │   ├── exam.go              # (to be added) ListExams, GetExam...
 │   │   ├── scoring.go           # (to be added) ScoreWriting, ScoreSpeaking via Gemini
 │   │   └── recommendation.go    # (to be added) SuggestNextExam
@@ -74,7 +77,7 @@ ivelox-core/
 │   ├── delivery/
 │   │   └── http/                # Gin handlers — thin layer only
 │   │       ├── router.go        # Route registration, middleware grouping
-│   │       ├── auth_handler.go  # POST /api/v1/auth/verify
+│   │       ├── auth_handler.go  # register, login, refresh, logout, verify
 │   │       ├── exam_handler.go  # (to be added)
 │   │       └── practice_handler.go # (to be added)
 │   │
@@ -84,7 +87,8 @@ ivelox-core/
 │   │
 │   └── infrastructure/          # Third-party wrappers
 │       ├── supabase/
-│       │   └── jwt.go           # VerifyJWT(token, secret) → Claims
+│       │   ├── jwt.go           # VerifyJWT(token, secret) → Claims (AppMetadata, UserMetadata)
+│       │   └── auth.go          # AuthClient: SignUp, SignIn, RefreshToken, SignOut
 │       ├── gemini/              # (to be added) Gemini 2.0 Flash client
 │       ├── groq/                # (to be added) Groq Whisper client
 │       └── deepl/               # (to be added) DeepL translation client
@@ -106,7 +110,14 @@ ivelox-core/
 ```
 GET  /api/v1/health                         # Health check (no auth)
 
-POST /api/v1/auth/verify                    # Verify JWT, return profile
+# Auth (public)
+POST /api/v1/auth/register                  # Sign up email/password → {access_token, refresh_token, needs_verification}
+POST /api/v1/auth/login                     # Sign in email/password → {access_token, refresh_token}
+POST /api/v1/auth/refresh                   # Exchange refresh_token → new token pair
+
+# Auth (protected — Bearer JWT required)
+POST /api/v1/auth/verify                    # Sync profile from JWT claims → {id, email, display_name, avatar_url, provider}
+POST /api/v1/auth/logout                    # Revoke session → 204
 
 GET  /api/v1/exams                          # List exams (filter: year, skill, source)
 GET  /api/v1/exams/:id                      # Exam detail + sections
@@ -132,8 +143,8 @@ PUT  /api/v1/admin/translations/:id
 ```
 1. Frontend sends: Authorization: Bearer <supabase-jwt>
 2. middleware/auth.go → infrastructure/supabase/jwt.go → VerifyJWT()
-3. JWT valid → set c.Set("userID", claims.Sub)
-4. Handler reads userID → calls usecase → repository queries DB
+3. JWT valid → set userID, userEmail, userProvider, userAvatarURL, userDisplayName in context
+4. Handler reads context values → calls usecase → repository queries DB
 5. JWT invalid → 401 Unauthorized
 ```
 
@@ -160,6 +171,7 @@ PORT=8080                    # Server port
 FRONTEND_URL=                # Allowed CORS origin
 SUPABASE_URL=                # Supabase project URL
 SUPABASE_JWT_SECRET=         # JWT secret from Supabase Settings → JWT
+SUPABASE_ANON_KEY=           # Supabase anon key (used by AuthClient for REST API calls)
 DATABASE_URL=                # PostgreSQL connection string (pooler URI)
 # Coming soon:
 GEMINI_API_KEY=
@@ -167,13 +179,82 @@ GROQ_API_KEY=
 DEEPL_API_KEY=
 ```
 
-## Current State (Foundation complete)
+## Database Schema
+
+### User tables
+| Table | Purpose |
+|---|---|
+| `profiles` | Basic info: display_name, email, avatar_url, provider, role |
+| `user_goals` | Per-skill target band + date (set at onboarding, updatable) |
+| `user_levels` | Current band per skill — seeded from onboarding quick test, upserted after sessions |
+| `user_scores` | Append-only score history per session per skill (for charts) |
+| `user_streaks` | Daily study streak + last_reminded_at (for push reminders) |
+
+### Content tables (admin-managed)
+| Table | Purpose |
+|---|---|
+| `exams` | Exam metadata (skill, difficulty, source) |
+| `sections` | Passages / audio per exam |
+| `questions` | MCQ, fill_blank, true_false, matching, short_answer |
+| `translations` | Pre-computed DeepL translations per section per lang |
+| `tips` | Study tips per skill and band range |
+
+### Session tables (user-generated)
+| Table | Purpose |
+|---|---|
+| `practice_sessions` | One session per exam attempt |
+| `answers` | User answers with AI score/feedback |
+| `progress_snapshots` | Legacy aggregate snapshots (superseded by user_scores) |
+
+## Auth Flow
+```
+Email/password + Google OAuth → handled by Supabase Auth (client SDK)
+Backend never receives raw passwords.
+
+Email flow:
+  POST /auth/register → Supabase SignUp → upsert profiles → {access_token, needs_verification: true}
+  POST /auth/login    → Supabase SignIn → {access_token, refresh_token}
+  POST /auth/verify   → VerifyJWT → UpsertFromJWT → {profile}
+
+Google OAuth flow:
+  Frontend: supabase.auth.signInWithOAuth({provider: 'google'}) → gets JWT
+  POST /auth/verify   → VerifyJWT → reads app_metadata.provider + user_metadata.avatar_url
+                     → UpsertFromJWT creates/updates profile → {profile}
+
+Token lifecycle:
+  POST /auth/refresh  → Supabase RefreshToken → new {access_token, refresh_token}
+  POST /auth/logout   → Supabase SignOut (revokes session) → 204
+
+On first Google login: UpsertFromJWT creates profiles row automatically.
+Onboarding: user sets goals (user_goals) + takes quick test → user_levels seeded.
+```
+
+## Current State
+
+### Auth (complete)
+- [x] POST /auth/register — email/password signup, returns needs_verification
+- [x] POST /auth/login — email/password login
+- [x] POST /auth/verify — JWT verify + upsert profile (email + Google OAuth)
+- [x] POST /auth/refresh — exchange refresh token for new token pair
+- [x] POST /auth/logout — revoke session via Supabase
+- [x] JWT middleware — extracts userID, email, provider, avatarURL, displayName
+- [x] Google OAuth support via JWT claims (app_metadata + user_metadata)
+- [x] Unit tests: usecase + handler layers (all auth flows)
+- [x] Integration tests: register, login, verify, refresh, logout, full flow
+- [x] Swagger docs at /swagger/index.html
+
+### Infrastructure
 - [x] Go + Gin server with health endpoint
 - [x] Clean Architecture layers wired
-- [x] JWT middleware (tested)
-- [x] POST /api/v1/auth/verify (tested)
-- [x] profiles table in Supabase with RLS + auto-create trigger
-- [ ] Swagger (swaggo)
+- [x] Full DB schema: all tables with RLS + indexes
+- [x] Domain structs + repository interfaces for all tables
+- [x] profiles: email, avatar_url, provider, onboarding_step
+- [x] user_goals, user_levels, user_scores, user_streaks tables
+- [x] SMTP via Resend (noreply@i-ivelox.app) — configured in Supabase
+
+### Pending
+- [ ] GET/PATCH /auth/profile — get and update user profile
+- [ ] Onboarding endpoints (set goals, input current level)
 - [ ] Dockerfile + Fly.io deploy
 - [ ] exam, practice, progress, tips endpoints
 - [ ] Gemini scoring integration

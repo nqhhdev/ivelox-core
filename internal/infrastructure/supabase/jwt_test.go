@@ -73,6 +73,50 @@ func TestVerifyJWT_MalformedToken(t *testing.T) {
 	}
 }
 
+func TestVerifyJWT_GoogleOAuthClaims(t *testing.T) {
+	userID := uuid.New()
+	claims := jwt.MapClaims{
+		"sub":   userID.String(),
+		"email": "google@example.com",
+		"exp":   time.Now().Add(time.Hour).Unix(),
+		"app_metadata": map[string]any{
+			"provider":  "google",
+			"providers": []string{"google"},
+		},
+		"user_metadata": map[string]any{
+			"avatar_url": "https://lh3.googleusercontent.com/photo.jpg",
+			"full_name":  "Google User",
+			"name":       "Google User",
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	signed, err := token.SignedString([]byte(jwtSecret))
+	if err != nil {
+		t.Fatalf("failed to sign token: %v", err)
+	}
+
+	result, err := supabase.VerifyJWT(signed, jwtSecret)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if result.AppMetadata.Provider != "google" {
+		t.Errorf("expected provider 'google', got %q", result.AppMetadata.Provider)
+	}
+	if result.UserMetadata.AvatarURL != "https://lh3.googleusercontent.com/photo.jpg" {
+		t.Errorf("expected avatar_url set, got %q", result.UserMetadata.AvatarURL)
+	}
+	if result.UserMetadata.FullName != "Google User" {
+		t.Errorf("expected full_name 'Google User', got %q", result.UserMetadata.FullName)
+	}
+}
+
+func TestVerifyJWT_EmptyToken(t *testing.T) {
+	_, err := supabase.VerifyJWT("", jwtSecret)
+	if err == nil {
+		t.Fatal("expected error for empty token, got nil")
+	}
+}
+
 func TestVerifyJWT_WrongAlgorithm(t *testing.T) {
 	// Generate RS256 token to trigger unexpected signing method branch
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)

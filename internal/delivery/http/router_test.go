@@ -11,7 +11,7 @@ import (
 
 func TestRouter_HealthCheck(t *testing.T) {
 	repo := &fakeUserRepo{users: nil}
-	uc := usecase.NewAuthUsecase(repo)
+	uc := usecase.NewAuthUsecase(repo, &fakeAuthProvider{})
 	r := httpdelivery.NewRouter("http://localhost:5173", "test-secret-key-that-is-long-enough", uc)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/health", nil)

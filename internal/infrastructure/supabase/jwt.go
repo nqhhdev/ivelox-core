@@ -1,17 +1,32 @@
 package supabase
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 )
 
+// Compile-time check: ensure Claims implements jwt.Claims interface.
+var _ jwt.Claims = (*Claims)(nil)
+
+type AppMetadata struct {
+	Provider  string   `json:"provider"`
+	Providers []string `json:"providers"`
+}
+
+type UserMetadata struct {
+	AvatarURL string `json:"avatar_url"`
+	FullName  string `json:"full_name"`
+	Name      string `json:"name"`
+}
+
 type Claims struct {
-	Sub   string `json:"sub"`
-	Email string `json:"email"`
-	Role  string `json:"role"`
+	Sub          string       `json:"sub"`
+	Email        string       `json:"email"`
+	Role         string       `json:"role"`
+	AppMetadata  AppMetadata  `json:"app_metadata"`
+	UserMetadata UserMetadata `json:"user_metadata"`
 	jwt.RegisteredClaims
 }
 
@@ -26,13 +41,12 @@ func VerifyJWT(tokenString, jwtSecret string) (*Claims, error) {
 		return nil, fmt.Errorf("invalid token: %w", err)
 	}
 
-	claims, ok := token.Claims.(*Claims)
-	if !ok || !token.Valid {
-		return nil, errors.New("invalid token claims")
-	}
+	// token.Valid is guaranteed true when err == nil with golang-jwt/v5.
+	// The type assertion cannot fail because we passed &Claims{} to ParseWithClaims.
+	claims := token.Claims.(*Claims) //nolint:errcheck
 
 	if _, err := uuid.Parse(claims.Sub); err != nil {
-		return nil, errors.New("invalid user id in token")
+		return nil, fmt.Errorf("invalid user id in token")
 	}
 
 	return claims, nil

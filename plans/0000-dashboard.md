@@ -10,7 +10,9 @@
 | Phase | Name | Status |
 |---|---|---|
 | 0 | Foundation | ✅ |
-| 1 | Database Schema | ❌ |
+| 1 | Database Schema | ✅ |
+| 1b | Auth Endpoints (register/login) + Swagger | 🔄 |
+| 1c | Auth & Onboarding Flow | ❌ |
 | 2 | Exam Endpoints | ❌ |
 | 3 | Practice Sessions | ❌ |
 | 4 | AI Scoring (Writing + Speaking) | ❌ |
@@ -21,6 +23,7 @@
 
 ## Phase Files
 - [0001 — Foundation](0001-foundation.md)
+- [0010 — Auth & Onboarding](0010-auth-onboarding.md)
 - [0002 — Database Schema](0002-database-schema.md)
 - [0003 — Exam Endpoints](0003-exam-endpoints.md)
 - [0004 — Practice Sessions](0004-practice-sessions.md)

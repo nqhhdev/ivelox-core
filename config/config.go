@@ -11,6 +11,7 @@ type Config struct {
 	Port              string
 	FrontendURL       string
 	SupabaseURL       string
+	SupabaseAnonKey   string
 	SupabaseJWTSecret string
 	DatabaseURL       string
 }
@@ -23,6 +24,7 @@ func Load() *Config {
 		Port:              getEnv("PORT", "8080"),
 		FrontendURL:       getEnv("FRONTEND_URL", "http://localhost:5173"),
 		SupabaseURL:       mustGetEnv("SUPABASE_URL"),
+		SupabaseAnonKey:   mustGetEnv("SUPABASE_ANON_KEY"),
 		SupabaseJWTSecret: mustGetEnv("SUPABASE_JWT_SECRET"),
 		DatabaseURL:       mustGetEnv("DATABASE_URL"),
 	}
