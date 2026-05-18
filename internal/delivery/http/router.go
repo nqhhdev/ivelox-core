@@ -28,12 +28,14 @@ func NewRouter(frontendURL, jwtSecret string, authUC *usecase.AuthUsecase) *gin.
 		// Public auth routes
 		api.POST("/auth/register", authHandler.Register)
 		api.POST("/auth/login", authHandler.Login)
+		api.POST("/auth/refresh", authHandler.Refresh)
 
 		// Protected routes
 		protected := api.Group("")
 		protected.Use(middleware.Auth(jwtSecret))
 		{
 			protected.POST("/auth/verify", authHandler.Verify)
+			protected.POST("/auth/logout", authHandler.Logout)
 		}
 	}
 

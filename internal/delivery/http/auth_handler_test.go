@@ -41,8 +41,10 @@ func (f *fakeUserRepo) Upsert(u *domain.User) error {
 }
 
 type fakeAuthProvider struct {
-	signUpErr error
-	signInErr error
+	signUpErr  error
+	signInErr  error
+	refreshErr error
+	signOutErr error
 }
 
 func (f *fakeAuthProvider) SignUp(email, password string) (*domain.AuthResult, error) {
@@ -69,6 +71,22 @@ func (f *fakeAuthProvider) SignIn(email, password string) (*domain.AuthResult, e
 	}, nil
 }
 
+func (f *fakeAuthProvider) RefreshToken(refreshToken string) (*domain.AuthResult, error) {
+	if f.refreshErr != nil {
+		return nil, f.refreshErr
+	}
+	return &domain.AuthResult{
+		AccessToken:  "new-access-tok",
+		RefreshToken: "new-refresh-tok",
+		UserID:       "00000000-0000-0000-0000-000000000001",
+		Email:        "user@example.com",
+	}, nil
+}
+
+func (f *fakeAuthProvider) SignOut(accessToken string) error {
+	return f.signOutErr
+}
+
 // --- helpers ---
 
 const secret = "test-secret-key-that-is-long-enough"
@@ -92,10 +110,12 @@ func setupAuthRouter(repo domain.UserRepository, auth domain.AuthProvider) *gin.
 	// public
 	r.POST("/api/v1/auth/register", handler.Register)
 	r.POST("/api/v1/auth/login", handler.Login)
+	r.POST("/api/v1/auth/refresh", handler.Refresh)
 	// protected
 	protected := r.Group("")
 	protected.Use(middleware.Auth(secret))
 	protected.POST("/api/v1/auth/verify", handler.Verify)
+	protected.POST("/api/v1/auth/logout", handler.Logout)
 	return r
 }
 
@@ -268,5 +288,93 @@ func TestLoginHandler_InvalidBody(t *testing.T) {
 
 	if w.Code != 400 {
 		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// --- Refresh ---
+
+func TestRefreshHandler_Success(t *testing.T) {
+	repo := &fakeUserRepo{users: map[uuid.UUID]*domain.User{}}
+	r := setupAuthRouter(repo, &fakeAuthProvider{})
+
+	body := jsonBody(t, map[string]string{"refresh_token": "old-refresh-tok"})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh", body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp map[string]any
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp["access_token"] == nil || resp["access_token"] == "" {
+		t.Error("expected access_token in response")
+	}
+	if resp["refresh_token"] == nil || resp["refresh_token"] == "" {
+		t.Error("expected refresh_token in response")
+	}
+}
+
+func TestRefreshHandler_InvalidToken(t *testing.T) {
+	repo := &fakeUserRepo{users: map[uuid.UUID]*domain.User{}}
+	r := setupAuthRouter(repo, &fakeAuthProvider{
+		refreshErr: fmt.Errorf("invalid refresh token"),
+	})
+
+	body := jsonBody(t, map[string]string{"refresh_token": "bad-tok"})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh", body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 401 {
+		t.Fatalf("expected 401, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestRefreshHandler_MissingBody(t *testing.T) {
+	repo := &fakeUserRepo{users: map[uuid.UUID]*domain.User{}}
+	r := setupAuthRouter(repo, &fakeAuthProvider{})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh", bytes.NewBufferString("{}"))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 400 {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// --- Logout ---
+
+func TestLogoutHandler_Success(t *testing.T) {
+	userID := uuid.New()
+	repo := &fakeUserRepo{users: map[uuid.UUID]*domain.User{
+		userID: {ID: userID, Email: "user@example.com"},
+	}}
+	r := setupAuthRouter(repo, &fakeAuthProvider{})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
+	req.Header.Set("Authorization", "Bearer "+makeTestToken(userID))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 204 {
+		t.Fatalf("expected 204, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestLogoutHandler_MissingToken(t *testing.T) {
+	repo := &fakeUserRepo{users: map[uuid.UUID]*domain.User{}}
+	r := setupAuthRouter(repo, &fakeAuthProvider{})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 401 {
+		t.Fatalf("expected 401, got %d: %s", w.Code, w.Body.String())
 	}
 }

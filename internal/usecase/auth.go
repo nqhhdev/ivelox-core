@@ -52,6 +52,14 @@ func (u *AuthUsecase) Login(email, password string) (*domain.AuthResult, error) 
 	return result, nil
 }
 
+func (u *AuthUsecase) Refresh(refreshToken string) (*domain.AuthResult, error) {
+	return u.authProvider.RefreshToken(refreshToken)
+}
+
+func (u *AuthUsecase) Logout(accessToken string) error {
+	return u.authProvider.SignOut(accessToken)
+}
+
 // UpsertFromJWT upserts a user profile from JWT claims.
 // Called on every /auth/verify to keep profile in sync (especially for Google OAuth users).
 func (u *AuthUsecase) UpsertFromJWT(userIDStr, email, provider, avatarURL, displayName string) (*domain.User, error) {

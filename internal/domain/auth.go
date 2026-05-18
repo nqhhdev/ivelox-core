@@ -1,9 +1,11 @@
 package domain
 
-// AuthProvider abstracts the Supabase Auth API (register, login).
+// AuthProvider abstracts the Supabase Auth API.
 type AuthProvider interface {
 	SignUp(email, password string) (*AuthResult, error)
 	SignIn(email, password string) (*AuthResult, error)
+	RefreshToken(refreshToken string) (*AuthResult, error)
+	SignOut(accessToken string) error
 }
 
 type AuthResult struct {

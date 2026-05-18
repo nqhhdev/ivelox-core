@@ -39,6 +39,14 @@ definitions:
         example: user
         type: string
     type: object
+  http.RefreshRequest:
+    properties:
+      refresh_token:
+        example: eyJhbGci...
+        type: string
+    required:
+    - refresh_token
+    type: object
   http.RegisterRequest:
     properties:
       email:
@@ -106,6 +114,55 @@ paths:
           schema:
             $ref: '#/definitions/http.ErrorResponse'
       summary: Login with email and password
+      tags:
+      - auth
+  /auth/logout:
+    post:
+      description: Revokes the current session token via Supabase. Client should discard
+        tokens after this call.
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Logout current user
+      tags:
+      - auth
+  /auth/refresh:
+    post:
+      consumes:
+      - application/json
+      description: Exchanges a refresh token for a new access token + refresh token
+        pair.
+      parameters:
+      - description: Refresh payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/http.RefreshRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/http.TokenResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/http.ErrorResponse'
+      summary: Refresh access token
       tags:
       - auth
   /auth/register:

@@ -29,8 +29,10 @@ func (f *fakeUserRepo) Upsert(u *domain.User) error {
 }
 
 type fakeAuthProvider struct {
-	signUpErr error
-	signInErr error
+	signUpErr    error
+	signInErr    error
+	refreshErr   error
+	signOutErr   error
 }
 
 func (f *fakeAuthProvider) SignUp(email, password string) (*domain.AuthResult, error) {
@@ -55,6 +57,22 @@ func (f *fakeAuthProvider) SignIn(email, password string) (*domain.AuthResult, e
 		UserID:       "00000000-0000-0000-0000-000000000001",
 		Email:        email,
 	}, nil
+}
+
+func (f *fakeAuthProvider) RefreshToken(refreshToken string) (*domain.AuthResult, error) {
+	if f.refreshErr != nil {
+		return nil, f.refreshErr
+	}
+	return &domain.AuthResult{
+		AccessToken:  "new-access-tok",
+		RefreshToken: "new-refresh-tok",
+		UserID:       "00000000-0000-0000-0000-000000000001",
+		Email:        "user@example.com",
+	}, nil
+}
+
+func (f *fakeAuthProvider) SignOut(accessToken string) error {
+	return f.signOutErr
 }
 
 // --- GetProfile ---
@@ -161,6 +179,58 @@ func TestLogin_AuthProviderError(t *testing.T) {
 
 	_, err := uc.Login("user@example.com", "wrongpassword")
 	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+// --- Refresh ---
+
+func TestRefresh_Success(t *testing.T) {
+	repo := &fakeUserRepo{users: map[uuid.UUID]*domain.User{}}
+	uc := usecase.NewAuthUsecase(repo, &fakeAuthProvider{})
+
+	result, err := uc.Refresh("old-refresh-tok")
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if result.AccessToken != "new-access-tok" {
+		t.Errorf("expected new access token, got %q", result.AccessToken)
+	}
+	if result.RefreshToken != "new-refresh-tok" {
+		t.Errorf("expected new refresh token, got %q", result.RefreshToken)
+	}
+}
+
+func TestRefresh_InvalidToken(t *testing.T) {
+	repo := &fakeUserRepo{users: map[uuid.UUID]*domain.User{}}
+	uc := usecase.NewAuthUsecase(repo, &fakeAuthProvider{
+		refreshErr: fmt.Errorf("invalid refresh token"),
+	})
+
+	_, err := uc.Refresh("bad-token")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+// --- Logout ---
+
+func TestLogout_Success(t *testing.T) {
+	repo := &fakeUserRepo{users: map[uuid.UUID]*domain.User{}}
+	uc := usecase.NewAuthUsecase(repo, &fakeAuthProvider{})
+
+	if err := uc.Logout("access-tok"); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+}
+
+func TestLogout_Error(t *testing.T) {
+	repo := &fakeUserRepo{users: map[uuid.UUID]*domain.User{}}
+	uc := usecase.NewAuthUsecase(repo, &fakeAuthProvider{
+		signOutErr: fmt.Errorf("logout failed"),
+	})
+
+	if err := uc.Logout("access-tok"); err == nil {
 		t.Fatal("expected error, got nil")
 	}
 }

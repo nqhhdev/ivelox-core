@@ -35,6 +35,10 @@ type SignInRequest struct {
 	Password string `json:"password"`
 }
 
+type refreshRequest struct {
+	RefreshToken string `json:"refresh_token"`
+}
+
 type authResponse struct {
 	AccessToken  string   `json:"access_token"`
 	RefreshToken string   `json:"refresh_token"`
@@ -77,6 +81,41 @@ func (c *AuthClient) SignIn(email, password string) (*domain.AuthResult, error) 
 		UserID:       r.User.ID,
 		Email:        r.User.Email,
 	}, nil
+}
+
+// RefreshToken implements domain.AuthProvider.
+func (c *AuthClient) RefreshToken(refreshToken string) (*domain.AuthResult, error) {
+	r, err := c.post("/auth/v1/token?grant_type=refresh_token", refreshRequest{RefreshToken: refreshToken})
+	if err != nil {
+		return nil, err
+	}
+	return &domain.AuthResult{
+		AccessToken:  r.AccessToken,
+		RefreshToken: r.RefreshToken,
+		UserID:       r.User.ID,
+		Email:        r.User.Email,
+	}, nil
+}
+
+// SignOut implements domain.AuthProvider.
+func (c *AuthClient) SignOut(accessToken string) error {
+	req, err := http.NewRequest(http.MethodPost, c.baseURL+"/auth/v1/logout", nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("apikey", c.anonKey)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("supabase logout error %d", resp.StatusCode)
+	}
+	return nil
 }
 
 func (c *AuthClient) post(path string, body any) (*authResponse, error) {
