@@ -150,7 +150,9 @@ func TestVerifyHandler_ReturnsProfile(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
 	var body map[string]any
-	json.Unmarshal(w.Body.Bytes(), &body)
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
 	if body["display_name"] != "Test User" {
 		t.Errorf("expected display_name 'Test User', got %v", body["display_name"])
 	}
@@ -218,7 +220,9 @@ func TestRegisterHandler_Success(t *testing.T) {
 		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
 	}
 	var resp map[string]any
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
 	if resp["access_token"] == "" || resp["access_token"] == nil {
 		t.Error("expected access_token in response")
 	}
@@ -276,7 +280,9 @@ func TestLoginHandler_Success(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
 	var resp map[string]any
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
 	if resp["access_token"] == "" || resp["access_token"] == nil {
 		t.Error("expected access_token in response")
 	}
@@ -329,7 +335,9 @@ func TestRefreshHandler_Success(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
 	var resp map[string]any
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
 	if resp["access_token"] == nil || resp["access_token"] == "" {
 		t.Error("expected access_token in response")
 	}

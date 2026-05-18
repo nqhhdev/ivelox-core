@@ -19,8 +19,14 @@ func authError(c *gin.Context, err error) {
 		strings.Contains(strings.ToLower(msg), "invalid refresh"),
 		strings.Contains(strings.ToLower(msg), "email not confirmed"):
 		c.JSON(http.StatusUnauthorized, gin.H{"error": msg})
-	default:
+	case strings.Contains(strings.ToLower(msg), "password must"),
+		strings.Contains(strings.ToLower(msg), "invalid request"),
+		strings.Contains(strings.ToLower(msg), "already registered"),
+		strings.Contains(strings.ToLower(msg), "already exists"),
+		strings.Contains(strings.ToLower(msg), "authentication error"):
 		c.JSON(http.StatusBadRequest, gin.H{"error": msg})
+	default:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 	}
 }
 

@@ -2,9 +2,11 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nqhhdev/ivelox-core/internal/domain"
 )
@@ -23,8 +25,11 @@ func (r *UserRepository) GetByID(id uuid.UUID) (*domain.User, error) {
 		`select id, coalesce(email,''), coalesce(display_name,''), coalesce(avatar_url,''), coalesce(provider,'email'), role::text, created_at, updated_at
 		 from public.profiles where id = $1`, id,
 	).Scan(&u.ID, &u.Email, &u.DisplayName, &u.AvatarURL, &u.Provider, &u.Role, &u.CreatedAt, &u.UpdatedAt)
-	if err != nil {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, fmt.Errorf("user not found: %w", err)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("query user by id: %w", err)
 	}
 	return &u, nil
 }

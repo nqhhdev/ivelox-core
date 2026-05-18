@@ -90,7 +90,10 @@ func TestVerifyJWT_GoogleOAuthClaims(t *testing.T) {
 		},
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	signed, _ := token.SignedString([]byte(jwtSecret))
+	signed, err := token.SignedString([]byte(jwtSecret))
+	if err != nil {
+		t.Fatalf("failed to sign token: %v", err)
+	}
 
 	result, err := supabase.VerifyJWT(signed, jwtSecret)
 	if err != nil {

@@ -3,7 +3,9 @@ package usecase
 import (
 	"fmt"
 	"regexp"
+	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/nqhhdev/ivelox-core/internal/domain"
@@ -18,7 +20,7 @@ var emailRe = regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
 //   - At least 1 digit (0-9)
 //   - At least 1 special character (!@#$%^&* etc.)
 func validatePassword(p string) error {
-	if len(p) < 8 {
+	if utf8.RuneCountInString(p) < 8 {
 		return fmt.Errorf("Password must be at least 8 characters")
 	}
 	var hasUpper, hasLower, hasDigit, hasSpecial bool
@@ -120,6 +122,9 @@ func (u *AuthUsecase) UpsertFromJWT(userIDStr, email, provider, avatarURL, displ
 	// Try to load existing profile first to preserve fields like onboarding_step.
 	existing, err := u.userRepo.GetByID(id)
 	if err != nil {
+		if !strings.Contains(err.Error(), "not found") {
+			return nil, fmt.Errorf("get profile: %w", err)
+		}
 		// Profile doesn't exist yet (first Google login) — create fresh.
 		existing = &domain.User{
 			ID:          id,

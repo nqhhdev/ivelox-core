@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/nqhhdev/ivelox-core/internal/domain"
 )
@@ -21,7 +22,7 @@ func NewAuthClient(supabaseURL, anonKey string) *AuthClient {
 	return &AuthClient{
 		baseURL: supabaseURL,
 		anonKey: anonKey,
-		client:  &http.Client{},
+		client:  &http.Client{Timeout: 10 * time.Second},
 	}
 }
 
@@ -124,7 +125,10 @@ func (c *AuthClient) SignOut(accessToken string) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode >= 400 {
 		return fmt.Errorf("supabase logout error %d", resp.StatusCode)
@@ -149,7 +153,10 @@ func (c *AuthClient) post(path string, body any) (*authResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+	}()
 
 	raw, err := io.ReadAll(resp.Body)
 	if err != nil {

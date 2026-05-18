@@ -71,8 +71,12 @@ func makeIntegrationToken(userID uuid.UUID, secret string) string {
 	return signed
 }
 
-func jsonBody(v any) *bytes.Buffer {
-	b, _ := json.Marshal(v)
+func jsonBody(t *testing.T, v any) *bytes.Buffer {
+	t.Helper()
+	b, err := json.Marshal(v)
+	if err != nil {
+		t.Fatalf("json marshal: %v", err)
+	}
 	return bytes.NewBuffer(b)
 }
 
@@ -89,7 +93,7 @@ func TestAuthRegister_NewUser(t *testing.T) {
 
 	email := uniqueEmail()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register",
-		jsonBody(map[string]string{"email": email, "password": "TestPass123!"}))
+		jsonBody(t, map[string]string{"email": email, "password": "TestPass123!"}))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -115,7 +119,7 @@ func TestAuthRegister_MissingPassword(t *testing.T) {
 	r := newTestRouter(t)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register",
-		jsonBody(map[string]string{"email": uniqueEmail()}))
+		jsonBody(t, map[string]string{"email": uniqueEmail()}))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -130,7 +134,7 @@ func TestAuthRegister_InvalidEmail(t *testing.T) {
 	r := newTestRouter(t)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register",
-		jsonBody(map[string]string{"email": "not-an-email", "password": "TestPass123!"}))
+		jsonBody(t, map[string]string{"email": "not-an-email", "password": "TestPass123!"}))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -145,7 +149,7 @@ func TestAuthRegister_WeakPassword(t *testing.T) {
 	r := newTestRouter(t)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register",
-		jsonBody(map[string]string{"email": uniqueEmail(), "password": "123"}))
+		jsonBody(t, map[string]string{"email": uniqueEmail(), "password": "123"}))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -160,7 +164,7 @@ func TestAuthRegister_NoUppercase(t *testing.T) {
 	r := newTestRouter(t)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register",
-		jsonBody(map[string]string{"email": uniqueEmail(), "password": "abc12345"}))
+		jsonBody(t, map[string]string{"email": uniqueEmail(), "password": "abc12345"}))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -175,7 +179,7 @@ func TestAuthRegister_NoDigit(t *testing.T) {
 	r := newTestRouter(t)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register",
-		jsonBody(map[string]string{"email": uniqueEmail(), "password": "Abcdefgh"}))
+		jsonBody(t, map[string]string{"email": uniqueEmail(), "password": "Abcdefgh"}))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -192,7 +196,7 @@ func TestAuthLogin_InvalidCredentials(t *testing.T) {
 	r := newTestRouter(t)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login",
-		jsonBody(map[string]string{"email": "nonexistent@ivelox-integration.com", "password": "wrongpass"}))
+		jsonBody(t, map[string]string{"email": "nonexistent@ivelox-integration.com", "password": "wrongpass"}))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -224,7 +228,7 @@ func TestAuthRegisterThenLogin(t *testing.T) {
 
 	// Step 1: register
 	regReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register",
-		jsonBody(map[string]string{"email": email, "password": password}))
+		jsonBody(t, map[string]string{"email": email, "password": password}))
 	regReq.Header.Set("Content-Type", "application/json")
 	regW := httptest.NewRecorder()
 	r.ServeHTTP(regW, regReq)
@@ -237,7 +241,7 @@ func TestAuthRegisterThenLogin(t *testing.T) {
 	// If email confirmation is disabled in project settings, this returns 200.
 	// Otherwise expects 400 ("Email not confirmed").
 	loginReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login",
-		jsonBody(map[string]string{"email": email, "password": password}))
+		jsonBody(t, map[string]string{"email": email, "password": password}))
 	loginReq.Header.Set("Content-Type", "application/json")
 	loginW := httptest.NewRecorder()
 	r.ServeHTTP(loginW, loginReq)
@@ -312,7 +316,7 @@ func TestAuthRefresh_InvalidToken(t *testing.T) {
 	r := newTestRouter(t)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh",
-		jsonBody(map[string]string{"refresh_token": "not-a-valid-token"}))
+		jsonBody(t, map[string]string{"refresh_token": "not-a-valid-token"}))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -327,7 +331,7 @@ func TestAuthRefresh_MissingBody(t *testing.T) {
 	r := newTestRouter(t)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh",
-		jsonBody(map[string]string{}))
+		jsonBody(t, map[string]string{}))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -346,7 +350,7 @@ func TestAuthRefreshThenVerify(t *testing.T) {
 
 	// Step 1: register
 	regReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register",
-		jsonBody(map[string]string{"email": email, "password": password}))
+		jsonBody(t, map[string]string{"email": email, "password": password}))
 	regReq.Header.Set("Content-Type", "application/json")
 	regW := httptest.NewRecorder()
 	r.ServeHTTP(regW, regReq)
@@ -363,7 +367,7 @@ func TestAuthRefreshThenVerify(t *testing.T) {
 
 	// Step 2: refresh → new token pair
 	refReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh",
-		jsonBody(map[string]string{"refresh_token": refreshToken}))
+		jsonBody(t, map[string]string{"refresh_token": refreshToken}))
 	refReq.Header.Set("Content-Type", "application/json")
 	refW := httptest.NewRecorder()
 	r.ServeHTTP(refW, refReq)
@@ -423,7 +427,7 @@ func TestAuthRegisterThenLogout(t *testing.T) {
 
 	// Step 1: register
 	regReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register",
-		jsonBody(map[string]string{"email": email, "password": password}))
+		jsonBody(t, map[string]string{"email": email, "password": password}))
 	regReq.Header.Set("Content-Type", "application/json")
 	regW := httptest.NewRecorder()
 	r.ServeHTTP(regW, regReq)
@@ -459,7 +463,7 @@ func TestAuthFullFlow(t *testing.T) {
 
 	// Step 1: register
 	regReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register",
-		jsonBody(map[string]string{"email": email, "password": password}))
+		jsonBody(t, map[string]string{"email": email, "password": password}))
 	regReq.Header.Set("Content-Type", "application/json")
 	regW := httptest.NewRecorder()
 	r.ServeHTTP(regW, regReq)
@@ -492,7 +496,7 @@ func TestAuthFullFlow(t *testing.T) {
 
 	// Step 3: refresh token
 	refReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh",
-		jsonBody(map[string]string{"refresh_token": refreshToken}))
+		jsonBody(t, map[string]string{"refresh_token": refreshToken}))
 	refReq.Header.Set("Content-Type", "application/json")
 	refW := httptest.NewRecorder()
 	r.ServeHTTP(refW, refReq)
