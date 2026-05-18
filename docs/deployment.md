@@ -219,37 +219,26 @@ flyctl logs --app ivelox-core
 
 ---
 
-## 7. CI/CD với GitHub Actions
+## 7. CI/CD — GitHub Actions
 
-Tạo `.github/workflows/deploy.yml`:
+Four workflows are configured in `.github/workflows/`:
 
-```yaml
-name: Deploy
+| Workflow | Trigger | Jobs |
+|---|---|---|
+| `ci.yml` | Every push & PR | `go build` + `go test -race` |
+| `deploy.yml` | Push to `main` | build → test → `flyctl deploy` |
+| `review.yml` | PRs only | `gofmt` + `go vet` + `staticcheck` |
+| `integration.yml` | Push to `main` & PRs | Supabase branch DB → integration tests |
 
-on:
-  push:
-    branches: [main]
+**Required GitHub Secrets:**
 
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: '1.22'
-      - run: go test ./...
+| Secret | How to get |
+|---|---|
+| `FLY_API_TOKEN` | `flyctl tokens create deploy` |
+| `SUPABASE_ACCESS_TOKEN` | supabase.com → Account → Access Tokens |
+| `SUPABASE_JWT_SECRET` | Supabase dashboard → Project Settings → JWT |
 
-  deploy:
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: superfly/flyctl-actions/setup-flyctl@master
-      - run: flyctl deploy --remote-only
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-```
+Add at: `github.com/nqhhdev/ivelox-core` → Settings → Secrets and variables → Actions
 
 ---
 
