@@ -186,7 +186,7 @@ func TestRegisterHandler_Success(t *testing.T) {
 	repo := &fakeUserRepo{users: map[uuid.UUID]*domain.User{}}
 	r := setupAuthRouter(repo, &fakeAuthProvider{})
 
-	body := jsonBody(t, map[string]string{"email": "new@example.com", "password": "Secret123"})
+	body := jsonBody(t, map[string]string{"email": "new@example.com", "password": "Secret123!"})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", body)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -227,7 +227,7 @@ func TestRegisterHandler_AuthProviderError(t *testing.T) {
 		signUpErr: fmt.Errorf("email already registered"),
 	})
 
-	body := jsonBody(t, map[string]string{"email": "dup@example.com", "password": "Secret123"})
+	body := jsonBody(t, map[string]string{"email": "dup@example.com", "password": "Secret123!"})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", body)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -244,7 +244,7 @@ func TestLoginHandler_Success(t *testing.T) {
 	repo := &fakeUserRepo{users: map[uuid.UUID]*domain.User{}}
 	r := setupAuthRouter(repo, &fakeAuthProvider{})
 
-	body := jsonBody(t, map[string]string{"email": "user@example.com", "password": "secret123"})
+	body := jsonBody(t, map[string]string{"email": "user@example.com", "password": "Secret123!"})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", body)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()

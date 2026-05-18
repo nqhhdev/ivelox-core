@@ -11,12 +11,12 @@ import (
 
 var emailRe = regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
 
-// validatePassword enforces: min 8 chars, at least 1 uppercase, 1 lowercase, 1 digit.
+// validatePassword enforces: min 8 chars, at least 1 uppercase, 1 lowercase, 1 digit, 1 special char.
 func validatePassword(p string) error {
 	if len(p) < 8 {
 		return fmt.Errorf("password must be at least 8 characters")
 	}
-	var hasUpper, hasLower, hasDigit bool
+	var hasUpper, hasLower, hasDigit, hasSpecial bool
 	for _, c := range p {
 		switch {
 		case unicode.IsUpper(c):
@@ -25,6 +25,8 @@ func validatePassword(p string) error {
 			hasLower = true
 		case unicode.IsDigit(c):
 			hasDigit = true
+		case unicode.IsPunct(c) || unicode.IsSymbol(c):
+			hasSpecial = true
 		}
 	}
 	if !hasUpper {
@@ -35,6 +37,9 @@ func validatePassword(p string) error {
 	}
 	if !hasDigit {
 		return fmt.Errorf("password must contain at least one number")
+	}
+	if !hasSpecial {
+		return fmt.Errorf("password must contain at least one special character")
 	}
 	return nil
 }

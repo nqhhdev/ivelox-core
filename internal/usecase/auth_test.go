@@ -123,11 +123,11 @@ func TestRegister_WeakPasswords(t *testing.T) {
 		name     string
 		password string
 	}{
-		{"too short", "Ab1"},
-		{"no uppercase", "abc12345"},
-		{"no lowercase", "ABC12345"},
-		{"no digit", "Abcdefgh"},
-		{"all lowercase no digit", "abcdefgh"},
+		{"too short", "Ab1!"},
+		{"no uppercase", "abc1234!"},
+		{"no lowercase", "ABC1234!"},
+		{"no digit", "Abcdefg!"},
+		{"no special char", "Secret123"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -143,7 +143,7 @@ func TestRegister_StrongPassword(t *testing.T) {
 	repo := &fakeUserRepo{users: map[uuid.UUID]*domain.User{}}
 	uc := usecase.NewAuthUsecase(repo, &fakeAuthProvider{})
 
-	cases := []string{"Secret123", "TestPass123!", "MyP4ssword", "Hello1World"}
+	cases := []string{"Secret123!", "TestPass123!", "MyP4ssw0rd!", "Hello1World@"}
 	for _, pw := range cases {
 		t.Run(pw, func(t *testing.T) {
 			_, err := uc.Register("user@example.com", pw)
@@ -160,7 +160,7 @@ func TestRegister_Success(t *testing.T) {
 	repo := &fakeUserRepo{users: map[uuid.UUID]*domain.User{}}
 	uc := usecase.NewAuthUsecase(repo, &fakeAuthProvider{})
 
-	result, err := uc.Register("user@example.com", "Password123")
+	result, err := uc.Register("user@example.com", "Password123!")
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -191,7 +191,7 @@ func TestRegister_AuthProviderError(t *testing.T) {
 		signUpErr: fmt.Errorf("email already registered"),
 	})
 
-	_, err := uc.Register("user@example.com", "Password123")
+	_, err := uc.Register("user@example.com", "Password123!")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
