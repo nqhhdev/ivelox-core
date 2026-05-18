@@ -12,7 +12,8 @@ import (
 // --- fakes ---
 
 type fakeUserRepo struct {
-	users map[uuid.UUID]*domain.User
+	users     map[uuid.UUID]*domain.User
+	upsertErr error
 }
 
 func (f *fakeUserRepo) GetByID(id uuid.UUID) (*domain.User, error) {
@@ -24,6 +25,12 @@ func (f *fakeUserRepo) GetByID(id uuid.UUID) (*domain.User, error) {
 }
 
 func (f *fakeUserRepo) Upsert(u *domain.User) error {
+	if f.upsertErr != nil {
+		return f.upsertErr
+	}
+	if f.users == nil {
+		f.users = map[uuid.UUID]*domain.User{}
+	}
 	f.users[u.ID] = u
 	return nil
 }
@@ -34,6 +41,7 @@ type fakeAuthProvider struct {
 	refreshErr        error
 	signOutErr        error
 	needsVerification bool
+	invalidUserID     bool
 }
 
 func (f *fakeAuthProvider) SignUp(email, password string) (*domain.AuthResult, error) {
@@ -44,10 +52,14 @@ func (f *fakeAuthProvider) SignUp(email, password string) (*domain.AuthResult, e
 	if f.needsVerification {
 		accessToken = ""
 	}
+	userID := "00000000-0000-0000-0000-000000000001"
+	if f.invalidUserID {
+		userID = "not-a-valid-uuid"
+	}
 	return &domain.AuthResult{
 		AccessToken:       accessToken,
 		RefreshToken:      "refresh-tok",
-		UserID:            "00000000-0000-0000-0000-000000000001",
+		UserID:            userID,
 		Email:             email,
 		NeedsVerification: f.needsVerification,
 	}, nil
@@ -416,5 +428,41 @@ func TestUpsertFromJWT_InvalidUUID(t *testing.T) {
 	_, err := uc.UpsertFromJWT("not-a-uuid", "user@example.com", "email", "", "")
 	if err == nil {
 		t.Fatal("expected error for invalid UUID, got nil")
+	}
+}
+
+func TestUpsertFromJWT_UpsertError(t *testing.T) {
+	repo := &fakeUserRepo{
+		users:     map[uuid.UUID]*domain.User{},
+		upsertErr: fmt.Errorf("db error"),
+	}
+	uc := usecase.NewAuthUsecase(repo, &fakeAuthProvider{})
+
+	_, err := uc.UpsertFromJWT(uuid.New().String(), "user@example.com", "email", "", "")
+	if err == nil {
+		t.Fatal("expected error on upsert failure, got nil")
+	}
+}
+
+func TestRegister_UpsertError(t *testing.T) {
+	repo := &fakeUserRepo{
+		users:     map[uuid.UUID]*domain.User{},
+		upsertErr: fmt.Errorf("db error"),
+	}
+	uc := usecase.NewAuthUsecase(repo, &fakeAuthProvider{needsVerification: false})
+
+	_, err := uc.Register("user@example.com", "Password123!")
+	if err == nil {
+		t.Fatal("expected error on upsert failure, got nil")
+	}
+}
+
+func TestRegister_InvalidUserIDFromProvider(t *testing.T) {
+	repo := &fakeUserRepo{users: map[uuid.UUID]*domain.User{}}
+	uc := usecase.NewAuthUsecase(repo, &fakeAuthProvider{invalidUserID: true})
+
+	_, err := uc.Register("user@example.com", "Password123!")
+	if err == nil {
+		t.Fatal("expected error for invalid user ID from provider, got nil")
 	}
 }
