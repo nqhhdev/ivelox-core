@@ -21,7 +21,7 @@ var emailRe = regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
 //   - At least 1 special character (!@#$%^&* etc.)
 func validatePassword(p string) error {
 	if utf8.RuneCountInString(p) < 8 {
-		return fmt.Errorf("Password must be at least 8 characters")
+		return fmt.Errorf("password must be at least 8 characters")
 	}
 	var hasUpper, hasLower, hasDigit, hasSpecial bool
 	for _, c := range p {
@@ -37,16 +37,16 @@ func validatePassword(p string) error {
 		}
 	}
 	if !hasUpper {
-		return fmt.Errorf("Password must contain at least one uppercase letter")
+		return fmt.Errorf("password must contain at least one uppercase letter")
 	}
 	if !hasLower {
-		return fmt.Errorf("Password must contain at least one lowercase letter")
+		return fmt.Errorf("password must contain at least one lowercase letter")
 	}
 	if !hasDigit {
-		return fmt.Errorf("Password must contain at least one number")
+		return fmt.Errorf("password must contain at least one number")
 	}
 	if !hasSpecial {
-		return fmt.Errorf("Password must contain at least one special character")
+		return fmt.Errorf("password must contain at least one special character")
 	}
 	return nil
 }
@@ -69,6 +69,9 @@ func (u *AuthUsecase) GetProfile(userIDStr string) (*domain.User, error) {
 }
 
 func (u *AuthUsecase) Register(email, password string) (*domain.AuthResult, error) {
+	if !emailRe.MatchString(email) {
+		return nil, fmt.Errorf("invalid email format")
+	}
 	if err := validatePassword(password); err != nil {
 		return nil, err
 	}
@@ -96,6 +99,9 @@ func (u *AuthUsecase) Register(email, password string) (*domain.AuthResult, erro
 }
 
 func (u *AuthUsecase) Login(email, password string) (*domain.AuthResult, error) {
+	if !emailRe.MatchString(email) {
+		return nil, fmt.Errorf("invalid email format")
+	}
 	result, err := u.authProvider.SignIn(email, password)
 	if err != nil {
 		return nil, err
