@@ -21,7 +21,8 @@ import (
 // --- fakes ---
 
 type fakeUserRepo struct {
-	users map[uuid.UUID]*domain.User
+	users     map[uuid.UUID]*domain.User
+	upsertErr error
 }
 
 func (f *fakeUserRepo) GetByID(id uuid.UUID) (*domain.User, error) {
@@ -33,6 +34,9 @@ func (f *fakeUserRepo) GetByID(id uuid.UUID) (*domain.User, error) {
 }
 
 func (f *fakeUserRepo) Upsert(u *domain.User) error {
+	if f.upsertErr != nil {
+		return f.upsertErr
+	}
 	if f.users == nil {
 		f.users = map[uuid.UUID]*domain.User{}
 	}
@@ -164,6 +168,24 @@ func TestVerifyHandler_NewUser(t *testing.T) {
 
 	if w.Code != 200 {
 		t.Fatalf("expected 200 (upsert creates new user), got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// TestVerifyHandler_UpsertError: upsert fails → 500.
+func TestVerifyHandler_UpsertError(t *testing.T) {
+	repo := &fakeUserRepo{
+		users:     map[uuid.UUID]*domain.User{},
+		upsertErr: fmt.Errorf("db error"),
+	}
+	r := setupAuthRouter(repo, &fakeAuthProvider{})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/verify", nil)
+	req.Header.Set("Authorization", "Bearer "+makeTestToken(uuid.New()))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 500 {
+		t.Fatalf("expected 500, got %d: %s", w.Code, w.Body.String())
 	}
 }
 
@@ -376,5 +398,61 @@ func TestLogoutHandler_MissingToken(t *testing.T) {
 
 	if w.Code != 401 {
 		t.Fatalf("expected 401, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// TestLogoutHandler_SignOutError: Supabase logout fails → 500.
+func TestLogoutHandler_SignOutError(t *testing.T) {
+	userID := uuid.New()
+	repo := &fakeUserRepo{users: map[uuid.UUID]*domain.User{
+		userID: {ID: userID, Email: "user@example.com"},
+	}}
+	r := setupAuthRouter(repo, &fakeAuthProvider{
+		signOutErr: fmt.Errorf("supabase error"),
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
+	req.Header.Set("Authorization", "Bearer "+makeTestToken(userID))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 500 {
+		t.Fatalf("expected 500, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// --- authError: rate limit ---
+
+func TestRegisterHandler_RateLimit(t *testing.T) {
+	repo := &fakeUserRepo{users: map[uuid.UUID]*domain.User{}}
+	r := setupAuthRouter(repo, &fakeAuthProvider{
+		signUpErr: fmt.Errorf("Too many requests, please try again later"),
+	})
+
+	body := jsonBody(t, map[string]string{"email": "user@example.com", "password": "Secret123!"})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 429 {
+		t.Fatalf("expected 429, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestLoginHandler_RateLimit(t *testing.T) {
+	repo := &fakeUserRepo{users: map[uuid.UUID]*domain.User{}}
+	r := setupAuthRouter(repo, &fakeAuthProvider{
+		signInErr: fmt.Errorf("Too many requests, please try again later"),
+	})
+
+	body := jsonBody(t, map[string]string{"email": "user@example.com", "password": "Secret123!"})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 429 {
+		t.Fatalf("expected 429, got %d: %s", w.Code, w.Body.String())
 	}
 }

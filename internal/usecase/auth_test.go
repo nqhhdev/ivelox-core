@@ -29,21 +29,27 @@ func (f *fakeUserRepo) Upsert(u *domain.User) error {
 }
 
 type fakeAuthProvider struct {
-	signUpErr    error
-	signInErr    error
-	refreshErr   error
-	signOutErr   error
+	signUpErr         error
+	signInErr         error
+	refreshErr        error
+	signOutErr        error
+	needsVerification bool
 }
 
 func (f *fakeAuthProvider) SignUp(email, password string) (*domain.AuthResult, error) {
 	if f.signUpErr != nil {
 		return nil, f.signUpErr
 	}
+	accessToken := "access-tok"
+	if f.needsVerification {
+		accessToken = ""
+	}
 	return &domain.AuthResult{
-		AccessToken:  "access-tok",
-		RefreshToken: "refresh-tok",
-		UserID:       "00000000-0000-0000-0000-000000000001",
-		Email:        email,
+		AccessToken:       accessToken,
+		RefreshToken:      "refresh-tok",
+		UserID:            "00000000-0000-0000-0000-000000000001",
+		Email:             email,
+		NeedsVerification: f.needsVerification,
 	}, nil
 }
 
@@ -273,5 +279,142 @@ func TestLogout_Error(t *testing.T) {
 
 	if err := uc.Logout("access-tok"); err == nil {
 		t.Fatal("expected error, got nil")
+	}
+}
+
+// --- Register: NeedsVerification path ---
+
+func TestRegister_NeedsVerification_SkipsProfileUpsert(t *testing.T) {
+	repo := &fakeUserRepo{users: map[uuid.UUID]*domain.User{}}
+	uc := usecase.NewAuthUsecase(repo, &fakeAuthProvider{needsVerification: true})
+
+	result, err := uc.Register("user@example.com", "Password123!")
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if !result.NeedsVerification {
+		t.Error("expected NeedsVerification=true")
+	}
+	// Profile must NOT be upserted when needs_verification=true
+	if len(repo.users) != 0 {
+		t.Errorf("expected empty repo, got %d users", len(repo.users))
+	}
+}
+
+func TestRegister_NoVerification_UpsertsProfile(t *testing.T) {
+	repo := &fakeUserRepo{users: map[uuid.UUID]*domain.User{}}
+	uc := usecase.NewAuthUsecase(repo, &fakeAuthProvider{needsVerification: false})
+
+	result, err := uc.Register("user@example.com", "Password123!")
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if result.NeedsVerification {
+		t.Error("expected NeedsVerification=false")
+	}
+	if len(repo.users) != 1 {
+		t.Errorf("expected 1 user in repo, got %d", len(repo.users))
+	}
+}
+
+// --- UpsertFromJWT ---
+
+func TestUpsertFromJWT_CreatesNewUser(t *testing.T) {
+	repo := &fakeUserRepo{users: map[uuid.UUID]*domain.User{}}
+	uc := usecase.NewAuthUsecase(repo, &fakeAuthProvider{})
+
+	userID := uuid.New()
+	user, err := uc.UpsertFromJWT(userID.String(), "google@example.com", "google", "https://avatar.url/photo.jpg", "Google User")
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if user.Email != "google@example.com" {
+		t.Errorf("expected email 'google@example.com', got %q", user.Email)
+	}
+	if user.Provider != "google" {
+		t.Errorf("expected provider 'google', got %q", user.Provider)
+	}
+	if user.AvatarURL != "https://avatar.url/photo.jpg" {
+		t.Errorf("expected avatar_url set, got %q", user.AvatarURL)
+	}
+	if user.DisplayName != "Google User" {
+		t.Errorf("expected display_name 'Google User', got %q", user.DisplayName)
+	}
+}
+
+func TestUpsertFromJWT_UpdatesExistingUser(t *testing.T) {
+	userID := uuid.New()
+	repo := &fakeUserRepo{users: map[uuid.UUID]*domain.User{
+		userID: {
+			ID:          userID,
+			Email:       "old@example.com",
+			Provider:    "email",
+			DisplayName: "Old Name",
+			AvatarURL:   "",
+		},
+	}}
+	uc := usecase.NewAuthUsecase(repo, &fakeAuthProvider{})
+
+	user, err := uc.UpsertFromJWT(userID.String(), "new@example.com", "google", "https://avatar.url/photo.jpg", "New Name")
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	// Email and provider updated
+	if user.Email != "new@example.com" {
+		t.Errorf("expected updated email, got %q", user.Email)
+	}
+	if user.Provider != "google" {
+		t.Errorf("expected updated provider, got %q", user.Provider)
+	}
+	// AvatarURL updated when non-empty
+	if user.AvatarURL != "https://avatar.url/photo.jpg" {
+		t.Errorf("expected avatar_url updated, got %q", user.AvatarURL)
+	}
+}
+
+func TestUpsertFromJWT_PreservesManualDisplayName(t *testing.T) {
+	userID := uuid.New()
+	repo := &fakeUserRepo{users: map[uuid.UUID]*domain.User{
+		userID: {
+			ID:          userID,
+			Email:       "user@example.com",
+			DisplayName: "My Custom Name", // manually set by user
+		},
+	}}
+	uc := usecase.NewAuthUsecase(repo, &fakeAuthProvider{})
+
+	user, err := uc.UpsertFromJWT(userID.String(), "user@example.com", "google", "", "JWT Name")
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	// Manual display name must NOT be overwritten by JWT
+	if user.DisplayName != "My Custom Name" {
+		t.Errorf("expected preserved display_name 'My Custom Name', got %q", user.DisplayName)
+	}
+}
+
+func TestUpsertFromJWT_SetsDisplayNameWhenEmpty(t *testing.T) {
+	userID := uuid.New()
+	repo := &fakeUserRepo{users: map[uuid.UUID]*domain.User{
+		userID: {ID: userID, Email: "user@example.com", DisplayName: ""},
+	}}
+	uc := usecase.NewAuthUsecase(repo, &fakeAuthProvider{})
+
+	user, err := uc.UpsertFromJWT(userID.String(), "user@example.com", "google", "", "From JWT")
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if user.DisplayName != "From JWT" {
+		t.Errorf("expected display_name 'From JWT', got %q", user.DisplayName)
+	}
+}
+
+func TestUpsertFromJWT_InvalidUUID(t *testing.T) {
+	repo := &fakeUserRepo{users: map[uuid.UUID]*domain.User{}}
+	uc := usecase.NewAuthUsecase(repo, &fakeAuthProvider{})
+
+	_, err := uc.UpsertFromJWT("not-a-uuid", "user@example.com", "email", "", "")
+	if err == nil {
+		t.Fatal("expected error for invalid UUID, got nil")
 	}
 }
