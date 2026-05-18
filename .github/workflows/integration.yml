@@ -23,9 +23,9 @@ jobs:
       - name: Run integration tests
         run: go test -tags integration ./tests/integration/... -v -count=1
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          SUPABASE_URL: https://zvcpgyzwmwwmredwzgcy.supabase.co
-          SUPABASE_JWT_SECRET: ${{ secrets.SUPABASE_JWT_SECRET }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          DATABASE_URL: ${{ secrets.CI_DATABASE_URL }}
+          SUPABASE_URL: https://wntvsnkrtbochjakzhws.supabase.co
+          SUPABASE_JWT_SECRET: ${{ secrets.CI_SUPABASE_JWT_SECRET }}
+          SUPABASE_ANON_KEY: ${{ secrets.CI_SUPABASE_ANON_KEY }}
           PORT: "8080"
           FRONTEND_URL: "http://localhost:5173"
