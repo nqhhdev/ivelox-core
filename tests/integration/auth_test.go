@@ -239,27 +239,29 @@ func TestAuthRegisterThenLogin(t *testing.T) {
 	}
 
 	// Step 2: login — Supabase requires email confirmation by default.
-	// If email confirmation is disabled in project settings, this returns 200.
-	// Otherwise expects 400 ("Email not confirmed").
+	// If email confirmation is disabled: 200 with tokens.
+	// If enabled: 401 ("Email not confirmed" / "authentication error").
 	loginReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login",
 		jsonBody(t, map[string]string{"email": email, "password": password}))
 	loginReq.Header.Set("Content-Type", "application/json")
 	loginW := httptest.NewRecorder()
 	r.ServeHTTP(loginW, loginReq)
 
-	if loginW.Code != 200 && loginW.Code != 400 {
-		t.Fatalf("login: expected 200 or 400 (unconfirmed), got %d: %s", loginW.Code, loginW.Body.String())
+	if loginW.Code != 200 && loginW.Code != 401 {
+		t.Fatalf("login: expected 200 or 401 (unconfirmed), got %d: %s", loginW.Code, loginW.Body.String())
 	}
 
 	if loginW.Code == 200 {
 		var resp map[string]any
-		json.Unmarshal(loginW.Body.Bytes(), &resp)
+		if err := json.Unmarshal(loginW.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("failed to decode login response: %v", err)
+		}
 		if resp["access_token"] == nil || resp["access_token"] == "" {
 			t.Error("expected access_token in login response")
 		}
-		t.Logf("login successful, onboarding_step=%v", resp["onboarding_step"])
+		t.Logf("login successful, access_token present")
 	} else {
-		t.Logf("login returned 400 — email confirmation likely required in Supabase settings")
+		t.Logf("login returned 401 — email confirmation required in Supabase settings")
 	}
 }
 
