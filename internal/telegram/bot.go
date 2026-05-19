@@ -38,8 +38,8 @@ func (b *Bot) SendPreview(pe *domain.PendingExam) (int, error) {
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("Approve", "approve:"+pe.ID.String()),
-			tgbotapi.NewInlineKeyboardButtonData("Reject", "reject:"+pe.ID.String()),
+			tgbotapi.NewInlineKeyboardButtonData("✅ Approve", "approve:"+pe.ID.String()),
+			tgbotapi.NewInlineKeyboardButtonData("❌ Reject", "reject:"+pe.ID.String()),
 		),
 	)
 
@@ -57,18 +57,17 @@ func (b *Bot) SendPreview(pe *domain.PendingExam) (int, error) {
 // FormatPreviewMessage formats a PendingExam into a human-readable
 // Telegram message. Exported for testability.
 func FormatPreviewMessage(pe *domain.PendingExam) string {
-	var skills []string
-	if pe.HasReading {
-		skills = append(skills, "Reading")
+	indicator := func(has bool) string {
+		if has {
+			return "✅"
+		}
+		return "❌"
 	}
-	if pe.HasListening {
-		skills = append(skills, "Listening")
-	}
-	if pe.HasWriting {
-		skills = append(skills, "Writing")
-	}
-	if pe.HasSpeaking {
-		skills = append(skills, "Speaking")
+	skills := []string{
+		indicator(pe.HasReading) + " Reading",
+		indicator(pe.HasListening) + " Listening",
+		indicator(pe.HasWriting) + " Writing",
+		indicator(pe.HasSpeaking) + " Speaking",
 	}
 
 	series := pe.Series
