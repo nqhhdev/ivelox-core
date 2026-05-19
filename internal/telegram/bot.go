@@ -10,20 +10,24 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/google/uuid"
 	"github.com/nqhhdev/ivelox-core/internal/domain"
-	"github.com/nqhhdev/ivelox-core/internal/staging"
 )
+
+// StagingRepository is the minimal interface the bot needs for approve/reject.
+type StagingRepository interface {
+	UpdateStatus(id uuid.UUID, status string, telegramMsgID int64, reviewedAt *time.Time) error
+}
 
 // Bot wraps the Telegram Bot API and provides methods for sending
 // pending exam previews and handling approve/reject callbacks.
 type Bot struct {
 	api    *tgbotapi.BotAPI
 	chatID int64
-	repo   *staging.Repository
+	repo   StagingRepository
 }
 
 // NewBot creates a new Telegram bot with the given token, target chat ID,
 // and staging repository for persisting review decisions.
-func NewBot(token string, chatID int64, repo *staging.Repository) (*Bot, error) {
+func NewBot(token string, chatID int64, repo StagingRepository) (*Bot, error) {
 	api, err := tgbotapi.NewBotAPI(token)
 	if err != nil {
 		return nil, fmt.Errorf("telegram bot init: %w", err)
@@ -125,6 +129,11 @@ func (b *Bot) StartPolling(ctx context.Context) {
 }
 
 func (b *Bot) handleCallback(_ context.Context, cb *tgbotapi.CallbackQuery) {
+	if cb.Message == nil {
+		log.Printf("[telegram] callback missing message: %s", cb.Data)
+		return
+	}
+
 	parts := strings.SplitN(cb.Data, ":", 2)
 	if len(parts) != 2 {
 		return
