@@ -1,6 +1,10 @@
 package domain
 
-import "github.com/google/uuid"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 type ExamRepository interface {
 	List(skill string) ([]*Exam, error)
@@ -45,4 +49,22 @@ type ProgressSnapshotRepository interface {
 type TipRepository interface {
 	List(skill string) ([]*Tip, error)
 	GetByID(id uuid.UUID) (*Tip, error)
+}
+
+type ExamSetRepository interface {
+	Create(es *ExamSet) error
+	GetByID(id uuid.UUID) (*ExamSet, error)
+	FindDuplicate(series string, testNumber int) (*ExamSet, error)
+}
+
+type SectionContentRepository interface {
+	Upsert(sc *SectionContent) error
+	GetBySectionID(sectionID uuid.UUID) (*SectionContent, error)
+}
+
+type PendingExamRepository interface {
+	Save(pe *PendingExam) error
+	UpdateStatus(id uuid.UUID, status string, telegramMsgID int64, reviewedAt *time.Time) error
+	ListPending() ([]*PendingExam, error)
+	GetByID(id uuid.UUID) (*PendingExam, error)
 }
