@@ -35,7 +35,10 @@ func (f *TopDevFetcher) Fetch() ([]RawJob, error) {
 
 func (f *TopDevFetcher) fetchKeyword(keyword string) ([]RawJob, error) {
 	url := fmt.Sprintf("https://topdev.vn/it-jobs?q=%s", keyword)
-	req, _ := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("topdev new request: %w", err)
+	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; jobfinder/1.0)")
 
 	resp, err := f.client.Do(req)
@@ -43,6 +46,9 @@ func (f *TopDevFetcher) fetchKeyword(keyword string) ([]RawJob, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("topdev: status %d", resp.StatusCode)
+	}
 
 	doc, err := html.Parse(resp.Body)
 	if err != nil {

@@ -24,6 +24,9 @@ func (f *ArbeitnowFetcher) Fetch() ([]RawJob, error) {
 		return nil, fmt.Errorf("arbeitnow fetch: %w", err)
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("arbeitnow: status %d", resp.StatusCode)
+	}
 
 	var result struct {
 		Data []struct {

@@ -42,6 +42,9 @@ func (f *RemotiveFetcher) fetchKeyword(keyword string) ([]RawJob, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("remotive: status %d", resp.StatusCode)
+	}
 
 	var result struct {
 		Jobs []struct {

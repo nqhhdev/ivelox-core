@@ -35,7 +35,10 @@ func (f *ITviecFetcher) Fetch() ([]RawJob, error) {
 
 func (f *ITviecFetcher) fetchKeyword(keyword string) ([]RawJob, error) {
 	url := fmt.Sprintf("https://itviec.com/it-jobs/%s", keyword)
-	req, _ := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("itviec new request: %w", err)
+	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; jobfinder/1.0)")
 	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
 
@@ -44,6 +47,9 @@ func (f *ITviecFetcher) fetchKeyword(keyword string) ([]RawJob, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("itviec: status %d", resp.StatusCode)
+	}
 
 	doc, err := html.Parse(resp.Body)
 	if err != nil {

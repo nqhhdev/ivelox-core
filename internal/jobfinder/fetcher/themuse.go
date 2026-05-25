@@ -44,6 +44,9 @@ func (f *TheMuseFetcher) fetchPage(url string, keywords []string) ([]RawJob, err
 		return nil, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("themuse: status %d", resp.StatusCode)
+	}
 
 	var result struct {
 		Results []struct {
