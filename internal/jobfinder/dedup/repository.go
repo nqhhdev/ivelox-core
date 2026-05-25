@@ -30,11 +30,8 @@ func (r *Repository) FilterNew(ctx context.Context, urls []string) ([]string, er
 	}
 
 	hashes := make([]string, len(urls))
-	hashToURL := make(map[string]string, len(urls))
 	for i, u := range urls {
-		h := Hash(u)
-		hashes[i] = h
-		hashToURL[h] = u
+		hashes[i] = Hash(u)
 	}
 
 	rows, err := r.db.Query(ctx,
@@ -50,9 +47,12 @@ func (r *Repository) FilterNew(ctx context.Context, urls []string) ([]string, er
 	for rows.Next() {
 		var h string
 		if err := rows.Scan(&h); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("dedup scan: %w", err)
 		}
 		seen[h] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("dedup rows iteration: %w", err)
 	}
 
 	var newURLs []string
@@ -94,5 +94,8 @@ func (r *Repository) Cleanup(ctx context.Context) error {
 	_, err := r.db.Exec(ctx,
 		`delete from job_finder.seen_jobs where notified_at < now() - interval '30 days'`,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("dedup cleanup: %w", err)
+	}
+	return nil
 }
