@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"sync"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/nqhhdev/ivelox-core/internal/jobfinder/chat"
@@ -19,6 +20,9 @@ type Bot struct {
 	chatH    *chat.Handler
 
 	// jobsByURL allows looking up a ScoredJob by its ApplyURL when starting a chat.
+	// Protected by mu since RegisterJobs (ticker goroutine) and startJobChat
+	// (polling goroutine) run concurrently.
+	mu        sync.RWMutex
 	jobsByURL map[string]scorer.ScoredJob
 }
 
@@ -39,6 +43,8 @@ func NewBot(token string, chatID int64, chatH *chat.Handler) (*Bot, error) {
 // RegisterJobs stores scored jobs so the bot can start chat sessions when
 // the user taps [💬 Chat with AI].
 func (b *Bot) RegisterJobs(jobs []scorer.ScoredJob) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	for _, j := range jobs {
 		b.jobsByURL[j.ApplyURL] = j
 	}
@@ -132,7 +138,9 @@ func (b *Bot) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery) {
 // ─── Job chat ────────────────────────────────────────────────────────────────
 
 func (b *Bot) startJobChat(_ context.Context, chatID int64, applyURL string) {
+	b.mu.RLock()
 	job, ok := b.jobsByURL[applyURL]
+	b.mu.RUnlock()
 	if !ok {
 		b.SendMessageToChat(chatID, "❌ Job not found. It may have expired. Try the next run.")
 		return
@@ -146,6 +154,10 @@ func (b *Bot) startJobChat(_ context.Context, chatID int64, applyURL string) {
 
 func (b *Bot) handleChatMessage(ctx context.Context, chatID int64, sess *chat.Session, question string) {
 	if strings.TrimSpace(question) == "" {
+		return
+	}
+	if b.chatH == nil {
+		b.SendMessageToChat(chatID, "Chat feature is not available.")
 		return
 	}
 

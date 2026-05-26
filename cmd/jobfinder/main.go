@@ -8,7 +8,6 @@ import (
 	"syscall"
 	"time"
 
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nqhhdev/ivelox-core/config"
 	jobfinder "github.com/nqhhdev/ivelox-core/internal/jobfinder"
@@ -34,12 +33,6 @@ func main() {
 	}
 	defer db.Close()
 
-	// Telegram bot API (shared with bot polling)
-	tgAPI, err := tgbotapi.NewBotAPI(cfg.TelegramToken)
-	if err != nil {
-		log.Fatalf("telegram init: %v", err)
-	}
-
 	// Gemini chat handler
 	chatHandler, err := chat.NewHandler(ctx, cfg.GeminiAPIKey)
 	if err != nil {
@@ -47,7 +40,7 @@ func main() {
 	}
 	defer chatHandler.Close()
 
-	// Telegram bot (for job chat sessions)
+	// Telegram bot (manages polling + chat sessions; creates its own BotAPI internally)
 	bot, err := telegram.NewBot(cfg.TelegramToken, cfg.TelegramChatID, chatHandler)
 	if err != nil {
 		log.Fatalf("bot init: %v", err)
@@ -69,8 +62,8 @@ func main() {
 		fetcher.NewITviecFetcher(),
 	}
 
-	// Notifier
-	ntf := notifier.NewNotifier(tgAPI, cfg.TelegramChatID)
+	// Notifier — reuse the bot's internal BotAPI to avoid duplicate connections
+	ntf := notifier.NewNotifier(bot.API(), cfg.TelegramChatID)
 
 	// Dedup
 	dedupRepo := dedup.NewRepository(db)
