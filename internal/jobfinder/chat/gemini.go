@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/generative-ai-go/genai"
@@ -14,6 +15,7 @@ import (
 // Handler answers questions about a specific job in a multi-turn conversation.
 type Handler struct {
 	client  *genai.Client
+	mu      sync.RWMutex
 	profile string // candidate profile text; updated via SetProfile
 }
 
@@ -31,12 +33,17 @@ func (h *Handler) Close() {
 
 // SetProfile updates the candidate profile text used for chat context.
 func (h *Handler) SetProfile(profileText string) {
+	h.mu.Lock()
 	h.profile = profileText
+	h.mu.Unlock()
 }
 
 // Reply generates an AI response for the given question in the context of a job session.
 func (h *Handler) Reply(ctx context.Context, sess *Session, question string) (string, error) {
-	prompt := buildChatPrompt(h.profile, sess.Job, sess.History, question)
+	h.mu.RLock()
+	profile := h.profile
+	h.mu.RUnlock()
+	prompt := buildChatPrompt(profile, sess.Job, sess.History, question)
 
 	model := h.client.GenerativeModel("gemini-2.5-flash-lite")
 	model.SetTemperature(0.7)

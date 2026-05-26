@@ -173,9 +173,23 @@ func (b *Bot) handleProfile(ctx context.Context, chatID int64) {
 	b.SendMessageToChat(chatID, p.FormatText())
 }
 
+// cmdName maps a profile field name back to the Telegram command suffix.
+var cmdName = map[string]string{
+	"role":       "role",
+	"skills":     "skills",
+	"location":   "location",
+	"salary_min": "salary",
+	"languages":  "lang",
+	"extra":      "extra",
+}
+
 func (b *Bot) handleSetField(ctx context.Context, chatID int64, field, value string) {
 	if value == "" {
-		b.SendMessageToChat(chatID, fmt.Sprintf("Usage: /set%s <value>", field))
+		cmd := cmdName[field]
+		if cmd == "" {
+			cmd = field
+		}
+		b.SendMessageToChat(chatID, fmt.Sprintf("Usage: /set%s <value>", cmd))
 		return
 	}
 
@@ -193,16 +207,19 @@ func (b *Bot) handleSetField(ctx context.Context, chatID int64, field, value str
 		return
 	}
 
-	// Reload updated profile and push to scorer + chat handler
+	// Reload updated profile and push to scorer + chat handler.
 	updated, err := b.profileRepo.Get(ctx)
-	if err == nil {
-		profileText := updated.ToPromptText()
-		if b.scorer != nil {
-			b.scorer.SetProfile(profileText)
-		}
-		if b.chatH != nil {
-			b.chatH.SetProfile(profileText)
-		}
+	if err != nil {
+		log.Printf("[telegram] profile reload after update: %v", err)
+		b.SendMessageToChat(chatID, "⚠️ Saved, but failed to reload profile into AI context. Restart may be needed.")
+		return
+	}
+	profileText := updated.ToPromptText()
+	if b.scorer != nil {
+		b.scorer.SetProfile(profileText)
+	}
+	if b.chatH != nil {
+		b.chatH.SetProfile(profileText)
 	}
 
 	oldVal := fieldValue(old, field)

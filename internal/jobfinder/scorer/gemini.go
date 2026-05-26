@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/generative-ai-go/genai"
@@ -16,6 +17,7 @@ import (
 type Scorer struct {
 	client  *genai.Client
 	model   string
+	mu      sync.RWMutex
 	profile string // candidate profile text; updated via SetProfile
 }
 
@@ -33,7 +35,9 @@ func (s *Scorer) Close() {
 
 // SetProfile updates the candidate profile text used for scoring.
 func (s *Scorer) SetProfile(profileText string) {
+	s.mu.Lock()
 	s.profile = profileText
+	s.mu.Unlock()
 }
 
 // ScoreResult is the raw JSON response from Gemini.
@@ -48,7 +52,10 @@ type ScoreResult struct {
 // Score evaluates a single job and returns a ScoredJob.
 // Returns nil if score < threshold.
 func (s *Scorer) Score(ctx context.Context, job fetcher.RawJob, threshold int) (*ScoredJob, error) {
-	prompt := buildPrompt(job, s.profile)
+	s.mu.RLock()
+	profile := s.profile
+	s.mu.RUnlock()
+	prompt := buildPrompt(job, profile)
 
 	model := s.client.GenerativeModel(s.model)
 	model.SetTemperature(0.1)

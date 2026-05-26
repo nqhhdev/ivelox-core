@@ -2,8 +2,11 @@ package profile
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -34,8 +37,11 @@ func (r *Repository) Get(ctx context.Context) (Profile, error) {
 		SELECT name, role, skills, location, salary_min, languages, extra
 		FROM job_finder.profile WHERE id = 1
 	`).Scan(&p.Name, &p.Role, &p.Skills, &p.Location, &p.SalaryMin, &p.Languages, &p.Extra)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Profile{}, nil
+	}
 	if err != nil {
-		return p, fmt.Errorf("profile get: %w", err)
+		return Profile{}, fmt.Errorf("profile get: %w", err)
 	}
 	return p, nil
 }
@@ -66,6 +72,14 @@ func (r *Repository) Update(ctx context.Context, field, value string) error {
 	return nil
 }
 
+// escapeMD escapes Telegram Markdown v1 special characters in user-supplied text
+// so they don't break message formatting.
+func escapeMD(s string) string {
+	// Markdown v1 special chars: _ * ` [
+	r := strings.NewReplacer("_", "\\_", "*", "\\*", "`", "\\`", "[", "\\[")
+	return r.Replace(s)
+}
+
 // FormatText returns the profile as a human-readable string for Telegram display.
 func (p Profile) FormatText() string {
 	return fmt.Sprintf(
@@ -76,7 +90,9 @@ func (p Profile) FormatText() string {
 			"💰 *Min Salary:* $%d/mo\n"+
 			"🗣 *Languages:* %s\n"+
 			"📝 *Extra:* %s",
-		p.Name, p.Role, p.Skills, p.Location, p.SalaryMin, p.Languages, p.Extra,
+		escapeMD(p.Name), escapeMD(p.Role), escapeMD(p.Skills),
+		escapeMD(p.Location), p.SalaryMin,
+		escapeMD(p.Languages), escapeMD(p.Extra),
 	)
 }
 
