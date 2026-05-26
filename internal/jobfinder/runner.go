@@ -114,7 +114,7 @@ func (r *Runner) Run(ctx context.Context) {
 }
 
 // fetchAll runs all fetchers in parallel and merges results.
-func (r *Runner) fetchAll(ctx context.Context) []fetcher.RawJob {
+func (r *Runner) fetchAll(_ context.Context) []fetcher.RawJob {
 	var mu sync.Mutex
 	var all []fetcher.RawJob
 	var wg sync.WaitGroup
