@@ -5,178 +5,177 @@ import (
 	"fmt"
 	"log"
 	"strings"
-	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	"github.com/google/uuid"
-	"github.com/nqhhdev/ivelox-core/internal/domain"
+	"github.com/nqhhdev/ivelox-core/internal/jobfinder/chat"
+	"github.com/nqhhdev/ivelox-core/internal/jobfinder/scorer"
 )
 
-// StagingRepository is the minimal interface the bot needs for approve/reject.
-type StagingRepository interface {
-	UpdateStatus(id uuid.UUID, status string, telegramMsgID int64, reviewedAt *time.Time) error
-}
-
-// Bot wraps the Telegram Bot API and provides methods for sending
-// pending exam previews and handling approve/reject callbacks.
+// Bot manages all Telegram interactions.
 type Bot struct {
-	api    *tgbotapi.BotAPI
-	chatID int64
-	repo   StagingRepository
+	api      *tgbotapi.BotAPI
+	chatID   int64
+	sessions *chat.Store
+	chatH    *chat.Handler
+
+	// jobsByURL allows looking up a ScoredJob by its ApplyURL when starting a chat.
+	jobsByURL map[string]scorer.ScoredJob
 }
 
-// NewBot creates a new Telegram bot with the given token, target chat ID,
-// and staging repository for persisting review decisions.
-func NewBot(token string, chatID int64, repo StagingRepository) (*Bot, error) {
+func NewBot(token string, chatID int64, chatH *chat.Handler) (*Bot, error) {
 	api, err := tgbotapi.NewBotAPI(token)
 	if err != nil {
-		return nil, fmt.Errorf("telegram bot init: %w", err)
+		return nil, fmt.Errorf("telegram init: %w", err)
 	}
-	return &Bot{api: api, chatID: chatID, repo: repo}, nil
+	return &Bot{
+		api:       api,
+		chatID:    chatID,
+		sessions:  chat.NewStore(),
+		chatH:     chatH,
+		jobsByURL: make(map[string]scorer.ScoredJob),
+	}, nil
 }
 
-// SendPreview sends a pending exam preview to Telegram with Approve/Reject buttons.
-// Returns the sent message ID (stored in pending_exams.telegram_msg_id).
-func (b *Bot) SendPreview(pe *domain.PendingExam) (int, error) {
-	text := FormatPreviewMessage(pe)
-
-	keyboard := tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("✅ Approve", "approve:"+pe.ID.String()),
-			tgbotapi.NewInlineKeyboardButtonData("❌ Reject", "reject:"+pe.ID.String()),
-		),
-	)
-
-	msg := tgbotapi.NewMessage(b.chatID, text)
-	msg.ParseMode = tgbotapi.ModeMarkdown
-	msg.ReplyMarkup = keyboard
-
-	sent, err := b.api.Send(msg)
-	if err != nil {
-		return 0, fmt.Errorf("send telegram message: %w", err)
+// RegisterJobs stores scored jobs so the bot can start chat sessions when
+// the user taps [💬 Chat with AI].
+func (b *Bot) RegisterJobs(jobs []scorer.ScoredJob) {
+	for _, j := range jobs {
+		b.jobsByURL[j.ApplyURL] = j
 	}
-	return sent.MessageID, nil
 }
 
-// FormatPreviewMessage formats a PendingExam into a human-readable
-// Telegram message. Exported for testability.
-func FormatPreviewMessage(pe *domain.PendingExam) string {
-	indicator := func(has bool) string {
-		if has {
-			return "✅"
-		}
-		return "❌"
-	}
-	skills := []string{
-		indicator(pe.HasReading) + " Reading",
-		indicator(pe.HasListening) + " Listening",
-		indicator(pe.HasWriting) + " Writing",
-		indicator(pe.HasSpeaking) + " Speaking",
-	}
-
-	series := pe.Series
-	if series == "" {
-		series = pe.SourceName
-	}
-	title := series
-	if pe.TestNumber > 0 {
-		title = fmt.Sprintf("%s Test %d", series, pe.TestNumber)
-	}
-
-	dupNote := ""
-	if pe.DuplicateOf != nil {
-		dupNote = "\n*Possible duplicate* of existing exam"
-	}
-
-	return fmt.Sprintf(
-		"*New Exam Found*\n\n"+
-			"*Title:* %s\n"+
-			"*Year:* %d\n"+
-			"*Source:* %s\n"+
-			"*Skills:* %s\n"+
-			"*Quality:* %.1f/10%s\n\n"+
-			"*ID:* %s",
-		title,
-		pe.Year,
-		pe.SourceName,
-		strings.Join(skills, " | "),
-		pe.QualityScore,
-		dupNote,
-		pe.ID.String(),
-	)
-}
-
-// StartPolling listens for callback queries (Approve/Reject button taps).
-// It blocks until the context is cancelled.
+// StartPolling blocks until ctx is cancelled.
 func (b *Bot) StartPolling(ctx context.Context) {
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
 	updates := b.api.GetUpdatesChan(u)
 
-	log.Println("[telegram] bot polling started")
+	log.Println("[telegram] polling started")
 	for {
 		select {
 		case <-ctx.Done():
 			b.api.StopReceivingUpdates()
 			return
 		case update := <-updates:
-			if update.CallbackQuery == nil {
-				continue
+			if update.Message != nil {
+				b.handleMessage(ctx, update.Message)
+			} else if update.CallbackQuery != nil {
+				b.handleCallback(ctx, update.CallbackQuery)
 			}
-			b.handleCallback(ctx, update.CallbackQuery)
 		}
 	}
 }
 
-func (b *Bot) handleCallback(_ context.Context, cb *tgbotapi.CallbackQuery) {
-	if cb.Message == nil {
-		log.Printf("[telegram] callback missing message: %s", cb.Data)
+// SendMessage sends a plain markdown message to the configured chat.
+func (b *Bot) SendMessage(text string) error {
+	msg := tgbotapi.NewMessage(b.chatID, text)
+	msg.ParseMode = tgbotapi.ModeMarkdown
+	_, err := b.api.Send(msg)
+	return err
+}
+
+// SendMessageToChat sends a markdown message to a specific chat ID.
+func (b *Bot) SendMessageToChat(chatID int64, text string) {
+	msg := tgbotapi.NewMessage(chatID, text)
+	msg.ParseMode = tgbotapi.ModeMarkdown
+	if _, err := b.api.Send(msg); err != nil {
+		log.Printf("[telegram] send error: %v", err)
+	}
+}
+
+// API returns the underlying bot API (used by notifier to send job messages).
+func (b *Bot) API() *tgbotapi.BotAPI { return b.api }
+
+// ─── Message handlers ────────────────────────────────────────────────────────
+
+func (b *Bot) handleMessage(ctx context.Context, msg *tgbotapi.Message) {
+	if msg.Chat.ID != b.chatID {
 		return
 	}
+
+	// If user has an active job chat session, route message to Gemini
+	if sess := b.sessions.Get(msg.Chat.ID); sess != nil && msg.Command() == "" {
+		b.handleChatMessage(ctx, msg.Chat.ID, sess, msg.Text)
+		return
+	}
+
+	switch msg.Command() {
+	case "done":
+		b.sessions.End(msg.Chat.ID)
+		b.SendMessageToChat(msg.Chat.ID, "Chat session ended.")
+	case "help", "start":
+		b.sendHelp(msg.Chat.ID)
+	}
+}
+
+// ─── Callback handlers ───────────────────────────────────────────────────────
+
+func (b *Bot) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery) {
+	if cb.Message == nil || cb.Message.Chat.ID != b.chatID {
+		return
+	}
+	chatID := cb.Message.Chat.ID
+	b.answerCallback(cb.ID, "")
 
 	parts := strings.SplitN(cb.Data, ":", 2)
 	if len(parts) != 2 {
 		return
 	}
-	action, idStr := parts[0], parts[1]
+	action, value := parts[0], parts[1]
 
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		log.Printf("[telegram] invalid id in callback: %s", idStr)
-		return
-	}
-
-	now := time.Now()
-	var status, label string
 	switch action {
-	case "approve":
-		status = "approved"
-		label = "Approved"
-	case "reject":
-		status = "rejected"
-		label = "Rejected"
-	default:
+	case "job_chat":
+		b.startJobChat(ctx, chatID, value)
+	}
+}
+
+// ─── Job chat ────────────────────────────────────────────────────────────────
+
+func (b *Bot) startJobChat(_ context.Context, chatID int64, applyURL string) {
+	job, ok := b.jobsByURL[applyURL]
+	if !ok {
+		b.SendMessageToChat(chatID, "❌ Job not found. It may have expired. Try the next run.")
+		return
+	}
+	b.sessions.Start(chatID, job)
+	b.SendMessageToChat(chatID, fmt.Sprintf(
+		"💬 *Chatting about:* %s @ %s\n\nAsk me anything about this job 👇\n_(Send /done to end)_",
+		job.Title, job.Company,
+	))
+}
+
+func (b *Bot) handleChatMessage(ctx context.Context, chatID int64, sess *chat.Session, question string) {
+	if strings.TrimSpace(question) == "" {
 		return
 	}
 
-	if err := b.repo.UpdateStatus(id, status, int64(cb.Message.MessageID), &now); err != nil {
-		log.Printf("[telegram] update status error: %v", err)
+	b.sessions.Append(chatID, "user", question)
+
+	reply, err := b.chatH.Reply(ctx, sess, question)
+	if err != nil {
+		log.Printf("[telegram] chat reply error: %v", err)
+		b.SendMessageToChat(chatID, "❌ AI error. Try again.")
 		return
 	}
 
-	// Edit message to show result
-	edit := tgbotapi.NewEditMessageText(b.chatID, cb.Message.MessageID,
-		cb.Message.Text+"\n\n*"+label+"*")
-	edit.ParseMode = tgbotapi.ModeMarkdown
-	if _, err := b.api.Send(edit); err != nil {
-		log.Printf("[telegram] edit message error: %v", err)
-	}
+	b.sessions.Append(chatID, "model", reply)
+	b.SendMessageToChat(chatID, reply)
+}
 
-	// Answer callback to remove loading spinner
-	answer := tgbotapi.NewCallback(cb.ID, label)
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+func (b *Bot) sendHelp(chatID int64) {
+	b.SendMessageToChat(chatID, ""+
+		"*iVelox Bot*\n\n"+
+		"/done — end current job chat session\n"+
+		"/help — show this message\n\n"+
+		"_Job notifications are sent automatically every 15 minutes._",
+	)
+}
+
+func (b *Bot) answerCallback(callbackID, text string) {
+	answer := tgbotapi.NewCallback(callbackID, text)
 	if _, err := b.api.Request(answer); err != nil {
 		log.Printf("[telegram] answer callback error: %v", err)
 	}
-
-	log.Printf("[telegram] exam %s -> %s", idStr, status)
 }
