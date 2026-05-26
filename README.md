@@ -58,6 +58,8 @@ curl http://localhost:8080/api/v1/health
 | `TELEGRAM_CHAT_ID` | yes* | Telegram chat ID for notifications |
 | `GEMINI_API_KEY` | yes* | Google Gemini API key for AI scoring and chat |
 
+`*` Required only when running the Job Finder service (`cmd/jobfinder`). The API server (`cmd/server`) works without them.
+
 ## API
 
 Base path: `/api/v1`

@@ -17,6 +17,7 @@ Two independent services, both deployed on Fly.io (Singapore region):
 Users are authenticated via Supabase Auth (JWT). No manual management needed.
 
 ### `public.profiles` — user profile (linked to `auth.users`)
+
 | Column | Type | Notes |
 |---|---|---|
 | `id` | `uuid` | FK → `auth.users.id` |
@@ -29,6 +30,7 @@ Users are authenticated via Supabase Auth (JWT). No manual management needed.
 | `updated_at` | `timestamptz` | auto |
 
 ### `job_finder.seen_jobs` — deduplication store
+
 | Column | Type | Notes |
 |---|---|---|
 | `url_hash` | `text` | PK — MD5 of apply URL |
@@ -39,6 +41,7 @@ Users are authenticated via Supabase Auth (JWT). No manual management needed.
 | `notified_at` | `timestamptz` | auto |
 
 ### `job_finder.profile` — candidate requirements (single row, id=1)
+
 | Column | Type | Notes |
 |---|---|---|
 | `id` | `int` | always 1 (single row) |

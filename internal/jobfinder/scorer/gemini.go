@@ -68,7 +68,7 @@ func (s *Scorer) Score(ctx context.Context, job fetcher.RawJob, threshold int) (
 		return nil, fmt.Errorf("gemini generate: %w", err)
 	}
 
-	if len(resp.Candidates) == 0 || len(resp.Candidates[0].Content.Parts) == 0 {
+	if len(resp.Candidates) == 0 || resp.Candidates[0].Content == nil || len(resp.Candidates[0].Content.Parts) == 0 {
 		return nil, fmt.Errorf("gemini empty response")
 	}
 

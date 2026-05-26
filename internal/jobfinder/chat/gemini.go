@@ -56,7 +56,7 @@ func (h *Handler) Reply(ctx context.Context, sess *Session, question string) (st
 		return "", fmt.Errorf("gemini chat: %w", err)
 	}
 
-	if len(resp.Candidates) == 0 || len(resp.Candidates[0].Content.Parts) == 0 {
+	if len(resp.Candidates) == 0 || resp.Candidates[0].Content == nil || len(resp.Candidates[0].Content.Parts) == 0 {
 		return "", fmt.Errorf("gemini empty response")
 	}
 
@@ -90,8 +90,14 @@ func buildChatPrompt(profile string, job scorer.ScoredJob, history []Message, qu
 	sb.WriteString(fmt.Sprintf("Description: %s\n", desc))
 
 	if len(history) > 0 {
+		// Cap to last 10 turns to keep prompt size bounded.
+		const maxHistory = 10
+		start := 0
+		if len(history) > maxHistory {
+			start = len(history) - maxHistory
+		}
 		sb.WriteString("\nCONVERSATION HISTORY:\n")
-		for _, m := range history {
+		for _, m := range history[start:] {
 			sb.WriteString(fmt.Sprintf("%s: %s\n", strings.ToUpper(m.Role), m.Content))
 		}
 	}
