@@ -39,7 +39,7 @@ func NewScorer(ctx context.Context, apiKey string) (*Scorer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("gemini client: %w", err)
 	}
-	return &Scorer{client: client, model: "gemini-2.0-flash"}, nil
+	return &Scorer{client: client, model: "gemini-2.5-flash-lite"}, nil
 }
 
 func (s *Scorer) Close() {

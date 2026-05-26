@@ -2,6 +2,7 @@ package telegram
 
 import (
 	"context"
+	"crypto/md5"
 	"fmt"
 	"log"
 	"strings"
@@ -19,11 +20,12 @@ type Bot struct {
 	sessions *chat.Store
 	chatH    *chat.Handler
 
-	// jobsByURL allows looking up a ScoredJob by its ApplyURL when starting a chat.
+	// jobsByHash allows looking up a ScoredJob by the MD5 hash of its ApplyURL.
+	// Using the hash keeps callback_data under Telegram's 64-byte limit.
 	// Protected by mu since RegisterJobs (ticker goroutine) and startJobChat
 	// (polling goroutine) run concurrently.
-	mu        sync.RWMutex
-	jobsByURL map[string]scorer.ScoredJob
+	mu         sync.RWMutex
+	jobsByHash map[string]scorer.ScoredJob
 }
 
 func NewBot(token string, chatID int64, chatH *chat.Handler) (*Bot, error) {
@@ -32,11 +34,11 @@ func NewBot(token string, chatID int64, chatH *chat.Handler) (*Bot, error) {
 		return nil, fmt.Errorf("telegram init: %w", err)
 	}
 	return &Bot{
-		api:       api,
-		chatID:    chatID,
-		sessions:  chat.NewStore(),
-		chatH:     chatH,
-		jobsByURL: make(map[string]scorer.ScoredJob),
+		api:        api,
+		chatID:     chatID,
+		sessions:   chat.NewStore(),
+		chatH:      chatH,
+		jobsByHash: make(map[string]scorer.ScoredJob),
 	}, nil
 }
 
@@ -46,8 +48,12 @@ func (b *Bot) RegisterJobs(jobs []scorer.ScoredJob) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	for _, j := range jobs {
-		b.jobsByURL[j.ApplyURL] = j
+		b.jobsByHash[urlHash(j.ApplyURL)] = j
 	}
+}
+
+func urlHash(url string) string {
+	return fmt.Sprintf("%x", md5.Sum([]byte(url)))[:16]
 }
 
 // StartPolling blocks until ctx is cancelled.
@@ -137,9 +143,9 @@ func (b *Bot) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery) {
 
 // ─── Job chat ────────────────────────────────────────────────────────────────
 
-func (b *Bot) startJobChat(_ context.Context, chatID int64, applyURL string) {
+func (b *Bot) startJobChat(_ context.Context, chatID int64, hash string) {
 	b.mu.RLock()
-	job, ok := b.jobsByURL[applyURL]
+	job, ok := b.jobsByHash[hash]
 	b.mu.RUnlock()
 	if !ok {
 		b.SendMessageToChat(chatID, "❌ Job not found. It may have expired. Try the next run.")

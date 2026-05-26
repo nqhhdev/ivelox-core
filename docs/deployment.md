@@ -1,36 +1,15 @@
-# iVelox Core — Deployment & Swagger Guide
+# Deployment Guide
 
-## 1. Prerequisites
-
-| Tool | Version | Install |
-|---|---|---|
-| Go | 1.22+ | `brew install go` |
-| Docker | latest | https://docs.docker.com/get-docker |
-| Railway CLI (optional) | latest | `brew install railway` |
-
----
-
-## 2. Run locally
+## Run Locally
 
 ```bash
-# Clone repo
 git clone https://github.com/nqhhdev/ivelox-core
 cd ivelox-core
-
-# Copy env
-cp .env.example .env
-# Fill in SUPABASE_JWT_SECRET and DATABASE_URL in .env
-
-# Download dependencies
+cp .env.example .env   # fill in your keys
 go mod tidy
-
-# Run server
 go run ./cmd/server/
 ```
 
-Server starts at `http://localhost:8080`
-
-Test health endpoint:
 ```bash
 curl http://localhost:8080/api/v1/health
 # {"status":"ok"}
@@ -38,180 +17,52 @@ curl http://localhost:8080/api/v1/health
 
 ---
 
-## 3. Add Swagger (swaggo)
-
-### 3.1 Install swag CLI
-
-```bash
-go install github.com/swaggo/swag/cmd/swag@latest
-export PATH="$PATH:$(go env GOPATH)/bin"
-```
-
-### 3.2 Add swaggo dependencies
-
-```bash
-go get github.com/swaggo/gin-swagger
-go get github.com/swaggo/files
-go get github.com/swaggo/swag
-```
-
-### 3.3 Annotate main.go
-
-Add these comments at the top of `cmd/server/main.go` (above `package main`):
-
-```go
-// @title           iVelox API
-// @version         1.0
-// @description     IELTS learning platform API
-// @host            localhost:8080
-// @BasePath        /api/v1
-// @securityDefinitions.apikey BearerAuth
-// @in header
-// @name Authorization
-// @description Enter: Bearer <your-jwt-token>
-package main
-```
-
-### 3.4 Annotate handlers
-
-Example for `internal/delivery/http/auth_handler.go`:
-
-```go
-// Verify godoc
-// @Summary      Verify JWT and return user profile
-// @Tags         auth
-// @Security     BearerAuth
-// @Produce      json
-// @Success      200  {object}  map[string]interface{}
-// @Failure      401  {object}  map[string]interface{}
-// @Failure      404  {object}  map[string]interface{}
-// @Router       /auth/verify [post]
-func (h *AuthHandler) Verify(c *gin.Context) {
-```
-
-### 3.5 Generate swagger docs
-
-```bash
-swag init -g cmd/server/main.go -o docs/swagger
-```
-
-This creates `docs/swagger/docs.go`, `swagger.json`, `swagger.yaml`.
-
-### 3.6 Register swagger route in router.go
-
-```go
-import (
-    swaggerFiles "github.com/swaggo/files"
-    ginSwagger "github.com/swaggo/gin-swagger"
-    _ "github.com/nqhhdev/ivelox-core/docs/swagger" // generated docs
-)
-
-// Inside NewRouter, add:
-r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
-```
-
-### 3.7 Access Swagger UI
-
-```
-http://localhost:8080/swagger/index.html
-```
-
----
-
-## 4. Docker
-
-### 4.1 Create `Dockerfile` at repo root
-
-```dockerfile
-FROM golang:1.22-alpine AS builder
-WORKDIR /app
-COPY go.mod go.sum ./
-RUN go mod download
-COPY . .
-RUN go build -o server ./cmd/server/
-
-FROM alpine:latest
-WORKDIR /app
-COPY --from=builder /app/server .
-EXPOSE 8080
-CMD ["./server"]
-```
-
-### 4.2 Create `.dockerignore`
-
-```
-.env
-.git
-*.md
-docs/
-```
-
-### 4.3 Build and run Docker image
+## Docker
 
 ```bash
 docker build -t ivelox-core .
 
 docker run -p 8080:8080 \
   -e PORT=8080 \
-  -e FRONTEND_URL=http://localhost:5173 \
-  -e SUPABASE_URL=https://zvcpgyzwmwwmredwzgcy.supabase.co \
-  -e SUPABASE_JWT_SECRET=your-jwt-secret \
-  -e DATABASE_URL=your-database-url \
+  -e SUPABASE_URL=... \
+  -e SUPABASE_ANON_KEY=... \
+  -e SUPABASE_JWT_SECRET=... \
+  -e DATABASE_URL=... \
   ivelox-core
 ```
 
 ---
 
-## 5. Deploy to Railway (Recommended)
+## Fly.io (current)
 
-Railway is the fastest platform for deploying Go apps. Free tier includes $5 credit/month.
-
-### 5.1 Setup
-
-1. Go to https://railway.app → New Project → Deploy from GitHub repo
-2. Select `nqhhdev/ivelox-core`
-3. Railway auto-detects Go and builds
-
-### 5.2 Set environment variables
-
-In Railway dashboard → Variables, add:
-
-```
-PORT=8080
-FRONTEND_URL=https://your-frontend-domain.vercel.app
-SUPABASE_URL=https://zvcpgyzwmwwmredwzgcy.supabase.co
-SUPABASE_JWT_SECRET=your-jwt-secret
-DATABASE_URL=your-database-url
-```
-
-### 5.3 Custom domain (optional)
-
-Railway dashboard → Settings → Domains → Generate Domain
-
-URL format: `https://ivelox-core-production.up.railway.app`
-
----
-
-## 6. Deploy to Fly.io (Recommended — current)
-
-Fly.io deploys Docker containers. Singapore region for lowest latency.
-
-### 6.1 Install flyctl
+### First deploy
 
 ```bash
 brew install flyctl
 fly auth login
+cd ivelox-core
+fly launch   # follow prompts, pick Singapore region (sin)
 ```
 
-### 6.2 Deploy
+### Set secrets
 
 ```bash
-cd ivelox-core
-flyctl secrets set SUPABASE_URL=... SUPABASE_JWT_SECRET=... DATABASE_URL=...
+flyctl secrets set \
+  SUPABASE_URL=... \
+  SUPABASE_ANON_KEY=... \
+  SUPABASE_JWT_SECRET=... \
+  DATABASE_URL=... \
+  TELEGRAM_TOKEN=... \
+  TELEGRAM_CHAT_ID=...
+```
+
+### Deploy
+
+```bash
 flyctl deploy
 ```
 
-### 6.3 Check logs
+### Logs
 
 ```bash
 flyctl logs --app ivelox-core
@@ -219,32 +70,23 @@ flyctl logs --app ivelox-core
 
 ---
 
-## 7. CI/CD — GitHub Actions
+## CI/CD (GitHub Actions)
 
-Four workflows are configured in `.github/workflows/`:
+Four workflows in `.github/workflows/`:
 
 | Workflow | Trigger | Jobs |
 |---|---|---|
 | `ci.yml` | Every push & PR | `go build` + `go test -race` |
 | `deploy.yml` | Push to `main` | build → test → `flyctl deploy` |
 | `review.yml` | PRs only | `gofmt` + `go vet` + `staticcheck` |
-| `integration.yml` | Push to `main` & PRs | Supabase branch DB → integration tests |
+| `integration.yml` | Push to `main` & PRs | Supabase branch DB integration tests |
 
-**Required GitHub Secrets:**
+### Required GitHub Secrets
+
+Go to: `github.com/nqhhdev/ivelox-core` → Settings → Secrets → Actions
 
 | Secret | How to get |
 |---|---|
 | `FLY_API_TOKEN` | `flyctl tokens create deploy` |
 | `SUPABASE_ACCESS_TOKEN` | supabase.com → Account → Access Tokens |
 | `SUPABASE_JWT_SECRET` | Supabase dashboard → Project Settings → JWT |
-
-Add at: `github.com/nqhhdev/ivelox-core` → Settings → Secrets and variables → Actions
-
----
-
-## 8. Platform Recommendation
-
-| Phase | Platform | Cost | Why |
-|---|---|---|---|
-| Early (friends/beta) | Railway | Free/$5 | Zero config, auto-deploy from GitHub |
-| Production | Fly.io | ~$5-10/month | More control, multi-region, Docker-based |

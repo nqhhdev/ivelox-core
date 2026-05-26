@@ -1,8 +1,8 @@
 # iVelox Backend — Claude Instructions
 
 ## Project
-IELTS learning platform API. Go + Gin + Clean Architecture.
-Companion frontend: https://github.com/nqhhdev/ivelox-app
+Personal backend platform. Go + Gin + Clean Architecture.
+Multi-service: auth foundation + pluggable services (Telegram bot, job finder, tools, etc.)
 
 ## Git rules
 - Author: nqhhdev <nqhh.dev@gmail.com> — always, no exceptions
@@ -18,7 +18,8 @@ domain/       → pure Go structs + interfaces, zero external imports
 usecase/      → business logic, imports domain only
 repository/   → implements domain interfaces, talks to PostgreSQL
 delivery/http → Gin handlers: parse request → call usecase → render JSON
-infrastructure → third-party clients (Supabase JWT, Gemini, Groq, DeepL)
+infrastructure → third-party clients (Supabase JWT)
+telegram/     → Telegram bot shell, extensible for new commands
 ```
 - Dependencies flow inward only: delivery → usecase → domain ← repository
 - All external dependencies injected via interfaces in domain/
@@ -29,18 +30,18 @@ infrastructure → third-party clients (Supabase JWT, Gemini, Groq, DeepL)
 - pgx/v5 — PostgreSQL driver (Supabase)
 - golang-jwt/v5 — JWT verification (Supabase tokens)
 - godotenv — env loading
-- swaggo/swag — Swagger docs (to be added)
-- Gemini 2.0 Flash — AI scoring (writing + speaking)
-- Groq Whisper — speaking transcription (free tier)
-- DeepL — translation fallback
+- go-telegram-bot-api/v5 — Telegram bot
 
 ## Environment variables (required)
 ```
 PORT=8080
 FRONTEND_URL=
 SUPABASE_URL=
+SUPABASE_ANON_KEY=
 SUPABASE_JWT_SECRET=
 DATABASE_URL=
+TELEGRAM_TOKEN=
+TELEGRAM_CHAT_ID=
 ```
 
 ## Code rules
@@ -51,6 +52,11 @@ DATABASE_URL=
 - No SQL in handlers or usecases — SQL only in repository/postgres/
 - Error messages in JSON: `{"error": "message"}` format
 - All protected routes use `middleware.Auth(jwtSecret)`
+
+## Adding new services
+New features (job finder, schedulers, bots) go in their own package under `internal/`.
+Each service gets its own domain interfaces if it needs DB access.
+Wire everything up in `cmd/server/main.go`.
 
 ## Testing
 - Use fake/in-memory repos for unit tests (no real DB)
@@ -64,4 +70,5 @@ DATABASE_URL=
 - Health check: `GET /api/v1/health` — always returns `{"status":"ok"}`
 
 ## Docs
-- Deployment + Swagger guide: `docs/deployment.md`
+- Deployment guide: `docs/deployment.md`
+- CI/CD guide: `docs/github-cicd.md`

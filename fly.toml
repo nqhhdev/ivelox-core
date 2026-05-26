@@ -2,6 +2,8 @@ app = "ivelox-core"
 primary_region = "sin"
 
 [build]
+  dockerfile = "Dockerfile"
+  target = "server"
 
 [env]
   PORT = "8080"

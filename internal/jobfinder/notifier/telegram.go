@@ -1,6 +1,7 @@
 package notifier
 
 import (
+	"crypto/md5"
 	"fmt"
 	"sort"
 	"strings"
@@ -43,7 +44,7 @@ func (n *Notifier) Notify(jobs []scorer.ScoredJob) {
 		keyboard := tgbotapi.NewInlineKeyboardMarkup(
 			tgbotapi.NewInlineKeyboardRow(
 				tgbotapi.NewInlineKeyboardButtonURL("👉 Apply Now", job.ApplyURL),
-				tgbotapi.NewInlineKeyboardButtonData("💬 Chat with AI", "job_chat:"+job.ApplyURL),
+				tgbotapi.NewInlineKeyboardButtonData("💬 Chat with AI", "job_chat:"+urlHash(job.ApplyURL)),
 			),
 		)
 		n.send(text, &keyboard)
@@ -103,6 +104,11 @@ func (n *Notifier) send(text string, keyboard *tgbotapi.InlineKeyboardMarkup) {
 	if _, err := n.api.Send(msg); err != nil {
 		fmt.Printf("[notifier] send error: %v\n", err)
 	}
+}
+
+// urlHash returns the first 16 hex chars of the MD5 of a URL — safe for callback_data.
+func urlHash(url string) string {
+	return fmt.Sprintf("%x", md5.Sum([]byte(url)))[:16]
 }
 
 // escapeMarkdown escapes special Telegram MarkdownV1 characters.

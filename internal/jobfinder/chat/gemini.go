@@ -46,7 +46,7 @@ func (h *Handler) Close() {
 func (h *Handler) Reply(ctx context.Context, sess *Session, question string) (string, error) {
 	prompt := buildChatPrompt(sess.Job, sess.History, question)
 
-	model := h.client.GenerativeModel("gemini-2.0-flash")
+	model := h.client.GenerativeModel("gemini-2.5-flash-lite")
 	model.SetTemperature(0.7)
 
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
