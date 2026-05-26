@@ -68,7 +68,7 @@ Cron ticker (15 min)
         │
         │  []NewJob
         ▼
-  AI Scorer (Gemini 2.0 Flash)
+  AI Scorer (Gemini 2.5 Flash Lite)
     per job: score 0–100, match_reasons[], gap_skills[]
     drop score < 60
         │
@@ -140,7 +140,7 @@ create table job_finder.seen_jobs (
 
 ## AI Scoring
 
-**Model:** Gemini 2.0 Flash (free tier — 1500 req/day, 15 req/min)
+**Model:** Gemini 2.5 Flash Lite (free tier — 1500 req/day, 15 req/min)
 
 **Rate:** Each cron run fetches ~50–150 jobs. After dedup, typically 10–30 new. Well within limits.
 

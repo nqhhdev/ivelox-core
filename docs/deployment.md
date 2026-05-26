@@ -125,6 +125,9 @@ flyctl secrets set \
   SUPABASE_ANON_KEY=... \
   SUPABASE_JWT_SECRET=... \
   DATABASE_URL=... \
+  GEMINI_API_KEY=... \
+  TELEGRAM_TOKEN=... \
+  TELEGRAM_CHAT_ID=... \
   --app ivelox-core
 
 fly deploy --config fly.toml

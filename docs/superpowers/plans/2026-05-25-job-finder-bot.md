@@ -1154,7 +1154,7 @@ func NewScorer(ctx context.Context, apiKey string) (*Scorer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("gemini client: %w", err)
 	}
-	return &Scorer{client: client, model: "gemini-2.0-flash"}, nil
+	return &Scorer{client: client, model: "gemini-2.5-flash-lite"}, nil
 }
 
 func (s *Scorer) Close() {
@@ -1796,7 +1796,7 @@ func (h *Handler) Close() {
 func (h *Handler) Reply(ctx context.Context, sess *Session, question string) (string, error) {
 	prompt := buildChatPrompt(sess.Job, sess.History, question)
 
-	model := h.client.GenerativeModel("gemini-2.0-flash")
+	model := h.client.GenerativeModel("gemini-2.5-flash-lite")
 	model.SetTemperature(0.7)
 
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)

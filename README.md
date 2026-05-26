@@ -54,8 +54,9 @@ curl http://localhost:8080/api/v1/health
 | `SUPABASE_ANON_KEY` | yes | Supabase anon key |
 | `SUPABASE_JWT_SECRET` | yes | JWT secret for token verification |
 | `DATABASE_URL` | yes | PostgreSQL connection string |
-| `TELEGRAM_TOKEN` | no | Telegram bot token |
-| `TELEGRAM_CHAT_ID` | no | Telegram chat ID for notifications |
+| `TELEGRAM_TOKEN` | yes* | Telegram bot token |
+| `TELEGRAM_CHAT_ID` | yes* | Telegram chat ID for notifications |
+| `GEMINI_API_KEY` | yes* | Google Gemini API key for AI scoring and chat |
 
 ## API
 

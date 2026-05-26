@@ -7,12 +7,20 @@ import (
 	"log"
 	"strings"
 	"sync"
+	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/nqhhdev/ivelox-core/internal/jobfinder/chat"
 	"github.com/nqhhdev/ivelox-core/internal/jobfinder/profile"
 	"github.com/nqhhdev/ivelox-core/internal/jobfinder/scorer"
 )
+
+const jobCacheTTL = 2 * time.Hour
+
+type cachedJob struct {
+	job       scorer.ScoredJob
+	expiresAt time.Time
+}
 
 // Bot manages all Telegram interactions.
 type Bot struct {
@@ -27,8 +35,9 @@ type Bot struct {
 	// Using the hash keeps callback_data under Telegram's 64-byte limit.
 	// Protected by mu since RegisterJobs (ticker goroutine) and startJobChat
 	// (polling goroutine) run concurrently.
+	// Entries expire after jobCacheTTL to prevent unbounded memory growth.
 	mu         sync.RWMutex
-	jobsByHash map[string]scorer.ScoredJob
+	jobsByHash map[string]cachedJob
 }
 
 func NewBot(token string, chatID int64, chatH *chat.Handler, profileRepo *profile.Repository, sc *scorer.Scorer) (*Bot, error) {
@@ -43,17 +52,28 @@ func NewBot(token string, chatID int64, chatH *chat.Handler, profileRepo *profil
 		chatH:       chatH,
 		profileRepo: profileRepo,
 		scorer:      sc,
-		jobsByHash:  make(map[string]scorer.ScoredJob),
+		jobsByHash:  make(map[string]cachedJob),
 	}, nil
 }
 
 // RegisterJobs stores scored jobs so the bot can start chat sessions when
-// the user taps [💬 Chat with AI].
+// the user taps [💬 Chat with AI]. Old entries are pruned on each call to
+// prevent unbounded memory growth from long-lived workers.
 func (b *Bot) RegisterJobs(jobs []scorer.ScoredJob) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+
+	// Prune expired entries before adding new ones.
+	now := time.Now()
+	for k, v := range b.jobsByHash {
+		if now.After(v.expiresAt) {
+			delete(b.jobsByHash, k)
+		}
+	}
+
+	expires := now.Add(jobCacheTTL)
 	for _, j := range jobs {
-		b.jobsByHash[urlHash(j.ApplyURL)] = j
+		b.jobsByHash[urlHash(j.ApplyURL)] = cachedJob{job: j, expiresAt: expires}
 	}
 }
 
@@ -236,12 +256,13 @@ func (b *Bot) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery) {
 
 func (b *Bot) startJobChat(_ context.Context, chatID int64, hash string) {
 	b.mu.RLock()
-	job, ok := b.jobsByHash[hash]
+	entry, ok := b.jobsByHash[hash]
 	b.mu.RUnlock()
-	if !ok {
+	if !ok || time.Now().After(entry.expiresAt) {
 		b.SendMessageToChat(chatID, "❌ Job not found. It may have expired. Try the next run.")
 		return
 	}
+	job := entry.job
 	b.sessions.Start(chatID, job)
 	b.SendMessageToChat(chatID, fmt.Sprintf(
 		"💬 *Chatting about:* %s @ %s\n\nAsk me anything about this job 👇\n_(Send /done to end)_",
