@@ -7,7 +7,7 @@ import (
 )
 
 func TestNewBot_InvalidToken(t *testing.T) {
-	_, err := telegram.NewBot("invalid-token", 0, nil)
+	_, err := telegram.NewBot("invalid-token", 0, nil, nil, nil)
 	if err == nil {
 		t.Fatal("expected error for invalid token")
 	}

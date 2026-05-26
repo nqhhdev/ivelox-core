@@ -15,6 +15,7 @@ import (
 	"github.com/nqhhdev/ivelox-core/internal/jobfinder/dedup"
 	"github.com/nqhhdev/ivelox-core/internal/jobfinder/fetcher"
 	"github.com/nqhhdev/ivelox-core/internal/jobfinder/notifier"
+	"github.com/nqhhdev/ivelox-core/internal/jobfinder/profile"
 	"github.com/nqhhdev/ivelox-core/internal/jobfinder/scorer"
 	"github.com/nqhhdev/ivelox-core/internal/telegram"
 )
@@ -40,18 +41,30 @@ func main() {
 	}
 	defer chatHandler.Close()
 
-	// Telegram bot (manages polling + chat sessions; creates its own BotAPI internally)
-	bot, err := telegram.NewBot(cfg.TelegramToken, cfg.TelegramChatID, chatHandler)
-	if err != nil {
-		log.Fatalf("bot init: %v", err)
-	}
-
 	// Gemini scorer
 	sc, err := scorer.NewScorer(ctx, cfg.GeminiAPIKey)
 	if err != nil {
 		log.Fatalf("scorer init: %v", err)
 	}
 	defer sc.Close()
+
+	// Profile repository — load profile and push to scorer + chat handler
+	profileRepo := profile.NewRepository(db)
+	p, err := profileRepo.Get(ctx)
+	if err != nil {
+		log.Printf("[jobfinder] profile load error (using empty): %v", err)
+	} else {
+		profileText := p.ToPromptText()
+		sc.SetProfile(profileText)
+		chatHandler.SetProfile(profileText)
+		log.Printf("[jobfinder] profile loaded: %s / %s", p.Name, p.Role)
+	}
+
+	// Telegram bot (manages polling + profile commands + chat sessions)
+	bot, err := telegram.NewBot(cfg.TelegramToken, cfg.TelegramChatID, chatHandler, profileRepo, sc)
+	if err != nil {
+		log.Fatalf("bot init: %v", err)
+	}
 
 	// Fetchers
 	fetchers := []fetcher.Fetcher{
@@ -73,7 +86,7 @@ func main() {
 		bot.RegisterJobs(jobs)
 	})
 
-	// Start bot polling (handles job chat callbacks)
+	// Start bot polling (handles job chat callbacks + profile commands)
 	go bot.StartPolling(ctx)
 
 	log.Printf("[jobfinder] starting — interval %s", runInterval)

@@ -12,26 +12,11 @@ import (
 	"google.golang.org/api/option"
 )
 
-const candidateProfile = `
-Name: Nguyen Quang Huy
-Role: Mobile Software Engineer / Flutter Developer
-Experience: 6+ years Flutter, Swift (6 months), Dart
-Architecture: Clean Architecture, MVVM, MVC, MVP
-Frameworks: Bloc, Riverpod, GetIt, Hive, Dio, GoRouter, Firebase, Background tasks, Isolates
-iOS native: CoreData, MapKit, SwiftUI, APN Notifications, NSE
-CI/CD: GitLab CI, Fastlane, GitHub Actions
-Agile: Scrum Master experience
-PO: roadmap building, user data analysis (Firebase, Web3 tools)
-Release manager: iOS, Android, Huawei AppGallery
-Web3: MetaMask, WalletConnect, SubWallet integration
-Preferred work: Remote / Hybrid / Part-time (open to job2)
-Languages: Vietnamese (native), English (professional)
-`
-
-// Scorer scores jobs against the hardcoded candidate profile using Gemini.
+// Scorer scores jobs against a candidate profile using Gemini.
 type Scorer struct {
-	client *genai.Client
-	model  string
+	client  *genai.Client
+	model   string
+	profile string // candidate profile text; updated via SetProfile
 }
 
 func NewScorer(ctx context.Context, apiKey string) (*Scorer, error) {
@@ -46,6 +31,11 @@ func (s *Scorer) Close() {
 	s.client.Close()
 }
 
+// SetProfile updates the candidate profile text used for scoring.
+func (s *Scorer) SetProfile(profileText string) {
+	s.profile = profileText
+}
+
 // ScoreResult is the raw JSON response from Gemini.
 type ScoreResult struct {
 	Score        int      `json:"score"`
@@ -58,7 +48,7 @@ type ScoreResult struct {
 // Score evaluates a single job and returns a ScoredJob.
 // Returns nil if score < threshold.
 func (s *Scorer) Score(ctx context.Context, job fetcher.RawJob, threshold int) (*ScoredJob, error) {
-	prompt := buildPrompt(job)
+	prompt := buildPrompt(job, s.profile)
 
 	model := s.client.GenerativeModel(s.model)
 	model.SetTemperature(0.1)
@@ -97,7 +87,7 @@ func (s *Scorer) Score(ctx context.Context, job fetcher.RawJob, threshold int) (
 	}, nil
 }
 
-func buildPrompt(job fetcher.RawJob) string {
+func buildPrompt(job fetcher.RawJob, profile string) string {
 	desc := job.Description
 	if len(desc) > 2000 {
 		desc = desc[:2000]
@@ -128,7 +118,7 @@ Scoring guide:
 - 60-79: Good match, worth considering
 - 40-59: Partial match, missing key requirements
 - 0-39: Poor match, skip`,
-		candidateProfile, job.Title, job.Company, job.Location, job.Salary, desc)
+		profile, job.Title, job.Company, job.Location, job.Salary, desc)
 }
 
 // extractJSON pulls the JSON object from a string that may contain surrounding text.

@@ -12,8 +12,8 @@ skills-lock.json
 .DS_Store
 internal/.DS_Store
 
-# Build artifacts
-server
-jobfinder
+# Build artifacts (root-level binaries)
+/server
+/jobfinder
 coverage.html
 coverage.out

@@ -11,23 +11,10 @@ import (
 	"google.golang.org/api/option"
 )
 
-const chatCandidateProfile = `
-Name: Nguyen Quang Huy
-Role: Mobile Software Engineer / Flutter Developer
-Experience: 6+ years Flutter, Swift (6 months), Dart
-Architecture: Clean Architecture, MVVM, MVC, MVP
-Frameworks: Bloc, Riverpod, GetIt, Hive, Dio, GoRouter, Firebase, Background tasks, Isolates
-iOS native: CoreData, MapKit, SwiftUI, APN Notifications, NSE
-CI/CD: GitLab CI, Fastlane, GitHub Actions
-Agile: Scrum Master, PO experience
-Release manager: iOS, Android, Huawei AppGallery
-Web3: MetaMask, WalletConnect, SubWallet
-Preferred: Remote / Hybrid / Part-time (job2)
-`
-
 // Handler answers questions about a specific job in a multi-turn conversation.
 type Handler struct {
-	client *genai.Client
+	client  *genai.Client
+	profile string // candidate profile text; updated via SetProfile
 }
 
 func NewHandler(ctx context.Context, apiKey string) (*Handler, error) {
@@ -42,9 +29,14 @@ func (h *Handler) Close() {
 	h.client.Close()
 }
 
+// SetProfile updates the candidate profile text used for chat context.
+func (h *Handler) SetProfile(profileText string) {
+	h.profile = profileText
+}
+
 // Reply generates an AI response for the given question in the context of a job session.
 func (h *Handler) Reply(ctx context.Context, sess *Session, question string) (string, error) {
-	prompt := buildChatPrompt(sess.Job, sess.History, question)
+	prompt := buildChatPrompt(h.profile, sess.Job, sess.History, question)
 
 	model := h.client.GenerativeModel("gemini-2.5-flash-lite")
 	model.SetTemperature(0.7)
@@ -64,12 +56,12 @@ func (h *Handler) Reply(ctx context.Context, sess *Session, question string) (st
 	return fmt.Sprintf("%v", resp.Candidates[0].Content.Parts[0]), nil
 }
 
-func buildChatPrompt(job scorer.ScoredJob, history []Message, question string) string {
+func buildChatPrompt(profile string, job scorer.ScoredJob, history []Message, question string) string {
 	var sb strings.Builder
 
 	sb.WriteString("You are a career advisor helping a mobile software engineer evaluate a job opportunity.\n\n")
 	sb.WriteString("CANDIDATE PROFILE:\n")
-	sb.WriteString(chatCandidateProfile)
+	sb.WriteString(profile)
 	sb.WriteString("\nJOB CONTEXT:\n")
 	sb.WriteString(fmt.Sprintf("Title: %s\n", job.Title))
 	sb.WriteString(fmt.Sprintf("Company: %s\n", job.Company))

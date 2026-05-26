@@ -10,15 +10,18 @@ import (
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/nqhhdev/ivelox-core/internal/jobfinder/chat"
+	"github.com/nqhhdev/ivelox-core/internal/jobfinder/profile"
 	"github.com/nqhhdev/ivelox-core/internal/jobfinder/scorer"
 )
 
 // Bot manages all Telegram interactions.
 type Bot struct {
-	api      *tgbotapi.BotAPI
-	chatID   int64
-	sessions *chat.Store
-	chatH    *chat.Handler
+	api         *tgbotapi.BotAPI
+	chatID      int64
+	sessions    *chat.Store
+	chatH       *chat.Handler
+	profileRepo *profile.Repository
+	scorer      *scorer.Scorer
 
 	// jobsByHash allows looking up a ScoredJob by the MD5 hash of its ApplyURL.
 	// Using the hash keeps callback_data under Telegram's 64-byte limit.
@@ -28,17 +31,19 @@ type Bot struct {
 	jobsByHash map[string]scorer.ScoredJob
 }
 
-func NewBot(token string, chatID int64, chatH *chat.Handler) (*Bot, error) {
+func NewBot(token string, chatID int64, chatH *chat.Handler, profileRepo *profile.Repository, sc *scorer.Scorer) (*Bot, error) {
 	api, err := tgbotapi.NewBotAPI(token)
 	if err != nil {
 		return nil, fmt.Errorf("telegram init: %w", err)
 	}
 	return &Bot{
-		api:        api,
-		chatID:     chatID,
-		sessions:   chat.NewStore(),
-		chatH:      chatH,
-		jobsByHash: make(map[string]scorer.ScoredJob),
+		api:         api,
+		chatID:      chatID,
+		sessions:    chat.NewStore(),
+		chatH:       chatH,
+		profileRepo: profileRepo,
+		scorer:      sc,
+		jobsByHash:  make(map[string]scorer.ScoredJob),
 	}, nil
 }
 
@@ -111,13 +116,99 @@ func (b *Bot) handleMessage(ctx context.Context, msg *tgbotapi.Message) {
 		return
 	}
 
+	arg := strings.TrimSpace(msg.CommandArguments())
+
 	switch msg.Command() {
 	case "done":
 		b.sessions.End(msg.Chat.ID)
 		b.SendMessageToChat(msg.Chat.ID, "Chat session ended.")
 	case "help", "start":
 		b.sendHelp(msg.Chat.ID)
+	case "profile":
+		b.handleProfile(ctx, msg.Chat.ID)
+	case "setrole":
+		b.handleSetField(ctx, msg.Chat.ID, "role", arg)
+	case "setskills":
+		b.handleSetField(ctx, msg.Chat.ID, "skills", arg)
+	case "setlocation":
+		b.handleSetField(ctx, msg.Chat.ID, "location", arg)
+	case "setsalary":
+		b.handleSetField(ctx, msg.Chat.ID, "salary_min", arg)
+	case "setlang":
+		b.handleSetField(ctx, msg.Chat.ID, "languages", arg)
+	case "setextra":
+		b.handleSetField(ctx, msg.Chat.ID, "extra", arg)
 	}
+}
+
+// ─── Profile commands ────────────────────────────────────────────────────────
+
+func (b *Bot) handleProfile(ctx context.Context, chatID int64) {
+	p, err := b.profileRepo.Get(ctx)
+	if err != nil {
+		log.Printf("[telegram] profile get: %v", err)
+		b.SendMessageToChat(chatID, "❌ Failed to load profile.")
+		return
+	}
+	b.SendMessageToChat(chatID, p.FormatText())
+}
+
+func (b *Bot) handleSetField(ctx context.Context, chatID int64, field, value string) {
+	if value == "" {
+		b.SendMessageToChat(chatID, fmt.Sprintf("Usage: /set%s <value>", field))
+		return
+	}
+
+	// Read current value first so user can see what changed
+	old, err := b.profileRepo.Get(ctx)
+	if err != nil {
+		log.Printf("[telegram] profile get before update: %v", err)
+		b.SendMessageToChat(chatID, "❌ Failed to read current profile.")
+		return
+	}
+
+	if err := b.profileRepo.Update(ctx, field, value); err != nil {
+		log.Printf("[telegram] profile update %s: %v", field, err)
+		b.SendMessageToChat(chatID, fmt.Sprintf("❌ Failed to update %s.", field))
+		return
+	}
+
+	// Reload updated profile and push to scorer + chat handler
+	updated, err := b.profileRepo.Get(ctx)
+	if err == nil {
+		profileText := updated.ToPromptText()
+		if b.scorer != nil {
+			b.scorer.SetProfile(profileText)
+		}
+		if b.chatH != nil {
+			b.chatH.SetProfile(profileText)
+		}
+	}
+
+	oldVal := fieldValue(old, field)
+	b.SendMessageToChat(chatID, fmt.Sprintf(
+		"✅ *%s* updated\n\n*Before:* %s\n*After:* %s",
+		field, oldVal, value,
+	))
+}
+
+// fieldValue returns the current string value of a profile field for display.
+func fieldValue(p profile.Profile, field string) string {
+	switch field {
+	case "role":
+		return p.Role
+	case "skills":
+		return p.Skills
+	case "location":
+		return p.Location
+	case "salary_min":
+		return fmt.Sprintf("$%d", p.SalaryMin)
+	case "languages":
+		return p.Languages
+	case "extra":
+		return p.Extra
+	}
+	return "—"
 }
 
 // ─── Callback handlers ───────────────────────────────────────────────────────
@@ -184,10 +275,19 @@ func (b *Bot) handleChatMessage(ctx context.Context, chatID int64, sess *chat.Se
 
 func (b *Bot) sendHelp(chatID int64) {
 	b.SendMessageToChat(chatID, ""+
-		"*iVelox Bot*\n\n"+
+		"*iVelox Job Finder*\n\n"+
+		"*Profile commands:*\n"+
+		"/profile — view current profile\n"+
+		"/setrole <role> — e.g. Senior Flutter Developer\n"+
+		"/setskills <skills> — e.g. Flutter, Kotlin, Swift\n"+
+		"/setlocation <locations> — e.g. Remote, Vietnam\n"+
+		"/setsalary <min_usd> — e.g. 2000\n"+
+		"/setlang <languages> — e.g. Vietnamese, English\n"+
+		"/setextra <notes> — any extra requirements\n\n"+
+		"*Chat commands:*\n"+
 		"/done — end current job chat session\n"+
 		"/help — show this message\n\n"+
-		"_Job notifications are sent automatically every 15 minutes._",
+		"_Jobs are fetched every 15 minutes._",
 	)
 }
 
