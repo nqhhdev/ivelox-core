@@ -1,6 +1,6 @@
 // @title           iVelox API
 // @version         1.0
-// @description     IELTS learning platform API
+// @description     Personal backend platform API
 // @host            localhost:8080
 // @BasePath        /api/v1
 // @securityDefinitions.apikey BearerAuth

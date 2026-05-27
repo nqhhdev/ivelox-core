@@ -1,36 +1,100 @@
-# iVelox Core — Deployment & Swagger Guide
+# Deployment Guide
 
-## 1. Prerequisites
+## Architecture Overview
 
-| Tool | Version | Install |
-|---|---|---|
-| Go | 1.22+ | `brew install go` |
-| Docker | latest | https://docs.docker.com/get-docker |
-| Railway CLI (optional) | latest | `brew install railway` |
+Two independent services, both deployed on Fly.io (Singapore region):
+
+| Service | App | Config | Purpose |
+|---|---|---|---|
+| API Server | `ivelox-core` | `fly.toml` | REST API + Supabase Auth |
+| Job Finder | `ivelox-jobfinder` | `fly.jobfinder.toml` | Telegram bot + job scraper |
 
 ---
 
-## 2. Run locally
+## Database Schema (Supabase)
 
-```bash
-# Clone repo
-git clone https://github.com/nqhhdev/ivelox-core
-cd ivelox-core
+### `auth` schema — managed by Supabase
+Users are authenticated via Supabase Auth (JWT). No manual management needed.
 
-# Copy env
-cp .env.example .env
-# Fill in SUPABASE_JWT_SECRET and DATABASE_URL in .env
+### `public.profiles` — user profile (linked to `auth.users`)
 
-# Download dependencies
-go mod tidy
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `uuid` | FK → `auth.users.id` |
+| `display_name` | `text` | nullable |
+| `email` | `text` | nullable |
+| `avatar_url` | `text` | nullable |
+| `role` | `user_role` | default `'user'` |
+| `provider` | `text` | default `'email'` |
+| `created_at` | `timestamptz` | auto |
+| `updated_at` | `timestamptz` | auto |
 
-# Run server
-go run ./cmd/server/
+### `job_finder.seen_jobs` — deduplication store
+
+| Column | Type | Notes |
+|---|---|---|
+| `url_hash` | `text` | PK — MD5 of apply URL |
+| `title` | `text` | |
+| `company` | `text` | |
+| `source` | `text` | remotive/arbeitnow/themuse/topdev/itviec |
+| `score` | `int` | Gemini match score 0–100 |
+| `notified_at` | `timestamptz` | auto |
+
+### `job_finder.profile` — candidate requirements (single row, id=1)
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `int` | always 1 (single row) |
+| `name` | `text` | candidate name |
+| `role` | `text` | target role |
+| `skills` | `text` | comma-separated skills |
+| `location` | `text` | preferred locations |
+| `salary_min` | `int` | minimum monthly salary (USD) |
+| `languages` | `text` | spoken languages |
+| `extra` | `text` | additional requirements |
+| `updated_at` | `timestamptz` | auto |
+
+Profile is editable via Telegram commands — see [Telegram Bot](#telegram-bot-commands) below.
+
+---
+
+## Environment Variables
+
+```env
+PORT=8080
+FRONTEND_URL=https://your-frontend.com
+
+# Supabase
+SUPABASE_URL=https://<project>.supabase.co
+SUPABASE_ANON_KEY=<anon-key>
+SUPABASE_JWT_SECRET=<jwt-secret>
+DATABASE_URL=postgresql://postgres.<project>:<password>@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres
+
+# Telegram
+TELEGRAM_TOKEN=<bot-token>
+TELEGRAM_CHAT_ID=<chat-id>
+
+# AI
+GEMINI_API_KEY=<gemini-key>
 ```
 
-Server starts at `http://localhost:8080`
+---
 
-Test health endpoint:
+## Run Locally
+
+```bash
+git clone https://github.com/nqhhdev/ivelox-core
+cd ivelox-core
+cp .env.example .env   # fill in your keys
+go mod tidy
+
+# API server
+go run ./cmd/server/
+
+# Job finder bot (separate terminal)
+go run ./cmd/jobfinder/
+```
+
 ```bash
 curl http://localhost:8080/api/v1/health
 # {"status":"ok"}
@@ -38,213 +102,100 @@ curl http://localhost:8080/api/v1/health
 
 ---
 
-## 3. Add Swagger (swaggo)
+## Docker
 
-### 3.1 Install swag CLI
-
-```bash
-go install github.com/swaggo/swag/cmd/swag@latest
-export PATH="$PATH:$(go env GOPATH)/bin"
-```
-
-### 3.2 Add swaggo dependencies
+Two build targets in the Dockerfile:
 
 ```bash
-go get github.com/swaggo/gin-swagger
-go get github.com/swaggo/files
-go get github.com/swaggo/swag
-```
+# API server
+docker build --target server -t ivelox-server .
+docker run -p 8080:8080 --env-file .env ivelox-server
 
-### 3.3 Annotate main.go
-
-Add these comments at the top of `cmd/server/main.go` (above `package main`):
-
-```go
-// @title           iVelox API
-// @version         1.0
-// @description     IELTS learning platform API
-// @host            localhost:8080
-// @BasePath        /api/v1
-// @securityDefinitions.apikey BearerAuth
-// @in header
-// @name Authorization
-// @description Enter: Bearer <your-jwt-token>
-package main
-```
-
-### 3.4 Annotate handlers
-
-Example for `internal/delivery/http/auth_handler.go`:
-
-```go
-// Verify godoc
-// @Summary      Verify JWT and return user profile
-// @Tags         auth
-// @Security     BearerAuth
-// @Produce      json
-// @Success      200  {object}  map[string]interface{}
-// @Failure      401  {object}  map[string]interface{}
-// @Failure      404  {object}  map[string]interface{}
-// @Router       /auth/verify [post]
-func (h *AuthHandler) Verify(c *gin.Context) {
-```
-
-### 3.5 Generate swagger docs
-
-```bash
-swag init -g cmd/server/main.go -o docs/swagger
-```
-
-This creates `docs/swagger/docs.go`, `swagger.json`, `swagger.yaml`.
-
-### 3.6 Register swagger route in router.go
-
-```go
-import (
-    swaggerFiles "github.com/swaggo/files"
-    ginSwagger "github.com/swaggo/gin-swagger"
-    _ "github.com/nqhhdev/ivelox-core/docs/swagger" // generated docs
-)
-
-// Inside NewRouter, add:
-r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
-```
-
-### 3.7 Access Swagger UI
-
-```
-http://localhost:8080/swagger/index.html
+# Job finder
+docker build --target jobfinder -t ivelox-jobfinder .
+docker run --env-file .env ivelox-jobfinder
 ```
 
 ---
 
-## 4. Docker
+## Fly.io Deploy
 
-### 4.1 Create `Dockerfile` at repo root
-
-```dockerfile
-FROM golang:1.22-alpine AS builder
-WORKDIR /app
-COPY go.mod go.sum ./
-RUN go mod download
-COPY . .
-RUN go build -o server ./cmd/server/
-
-FROM alpine:latest
-WORKDIR /app
-COPY --from=builder /app/server .
-EXPOSE 8080
-CMD ["./server"]
-```
-
-### 4.2 Create `.dockerignore`
-
-```
-.env
-.git
-*.md
-docs/
-```
-
-### 4.3 Build and run Docker image
+### API Server (`fly.toml`)
 
 ```bash
-docker build -t ivelox-core .
+flyctl secrets set \
+  SUPABASE_URL=... \
+  SUPABASE_ANON_KEY=... \
+  SUPABASE_JWT_SECRET=... \
+  DATABASE_URL=... \
+  GEMINI_API_KEY=... \
+  TELEGRAM_TOKEN=... \
+  TELEGRAM_CHAT_ID=... \
+  --app ivelox-core
 
-docker run -p 8080:8080 \
-  -e PORT=8080 \
-  -e FRONTEND_URL=http://localhost:5173 \
-  -e SUPABASE_URL=https://zvcpgyzwmwwmredwzgcy.supabase.co \
-  -e SUPABASE_JWT_SECRET=your-jwt-secret \
-  -e DATABASE_URL=your-database-url \
-  ivelox-core
-```
-
----
-
-## 5. Deploy to Railway (Recommended)
-
-Railway is the fastest platform for deploying Go apps. Free tier includes $5 credit/month.
-
-### 5.1 Setup
-
-1. Go to https://railway.app → New Project → Deploy from GitHub repo
-2. Select `nqhhdev/ivelox-core`
-3. Railway auto-detects Go and builds
-
-### 5.2 Set environment variables
-
-In Railway dashboard → Variables, add:
-
-```
-PORT=8080
-FRONTEND_URL=https://your-frontend-domain.vercel.app
-SUPABASE_URL=https://zvcpgyzwmwwmredwzgcy.supabase.co
-SUPABASE_JWT_SECRET=your-jwt-secret
-DATABASE_URL=your-database-url
-```
-
-### 5.3 Custom domain (optional)
-
-Railway dashboard → Settings → Domains → Generate Domain
-
-URL format: `https://ivelox-core-production.up.railway.app`
-
----
-
-## 6. Deploy to Fly.io (Recommended — current)
-
-Fly.io deploys Docker containers. Singapore region for lowest latency.
-
-### 6.1 Install flyctl
-
-```bash
-brew install flyctl
-fly auth login
-```
-
-### 6.2 Deploy
-
-```bash
-cd ivelox-core
-flyctl secrets set SUPABASE_URL=... SUPABASE_JWT_SECRET=... DATABASE_URL=...
-flyctl deploy
-```
-
-### 6.3 Check logs
-
-```bash
+fly deploy --config fly.toml
 flyctl logs --app ivelox-core
 ```
 
+### Job Finder (`fly.jobfinder.toml`)
+
+```bash
+flyctl apps create ivelox-jobfinder --org personal
+
+flyctl secrets set \
+  DATABASE_URL=... \
+  GEMINI_API_KEY=... \
+  TELEGRAM_TOKEN=... \
+  TELEGRAM_CHAT_ID=... \
+  SUPABASE_URL=... \
+  SUPABASE_ANON_KEY=... \
+  SUPABASE_JWT_SECRET=... \
+  --app ivelox-jobfinder
+
+fly deploy --config fly.jobfinder.toml
+flyctl logs --app ivelox-jobfinder
+```
+
 ---
 
-## 7. CI/CD — GitHub Actions
+## Telegram Bot Commands
 
-Four workflows are configured in `.github/workflows/`:
+Send these commands to your bot to manage job search requirements:
+
+| Command | Example | Effect |
+|---|---|---|
+| `/profile` | `/profile` | View current candidate profile |
+| `/setrole` | `/setrole Senior Flutter Developer` | Update target role |
+| `/setskills` | `/setskills Flutter, Kotlin, Swift` | Update skills |
+| `/setlocation` | `/setlocation Remote, Vietnam` | Update preferred location |
+| `/setsalary` | `/setsalary 3000` | Set minimum salary (USD/mo) |
+| `/setlang` | `/setlang Vietnamese, English` | Update languages |
+| `/setextra` | `/setextra Open to part-time` | Extra requirements |
+| `/done` | `/done` | End current AI chat session |
+| `/help` | `/help` | Show all commands |
+
+Each `/set*` command shows the **before** and **after** values and applies changes immediately to the next scoring cycle.
+
+To chat about a specific job, tap the **💬 Chat with AI** button on any job notification. Send `/done` to end the session.
+
+---
+
+## CI/CD (GitHub Actions)
 
 | Workflow | Trigger | Jobs |
 |---|---|---|
 | `ci.yml` | Every push & PR | `go build` + `go test -race` |
 | `deploy.yml` | Push to `main` | build → test → `flyctl deploy` |
-| `review.yml` | PRs only | `gofmt` + `go vet` + `staticcheck` |
-| `integration.yml` | Push to `main` & PRs | Supabase branch DB → integration tests |
 
-**Required GitHub Secrets:**
+### Required GitHub Secrets
+
+Go to: `github.com/nqhhdev/ivelox-core` → Settings → Secrets → Actions
 
 | Secret | How to get |
 |---|---|
 | `FLY_API_TOKEN` | `flyctl tokens create deploy` |
-| `SUPABASE_ACCESS_TOKEN` | supabase.com → Account → Access Tokens |
 | `SUPABASE_JWT_SECRET` | Supabase dashboard → Project Settings → JWT |
-
-Add at: `github.com/nqhhdev/ivelox-core` → Settings → Secrets and variables → Actions
-
----
-
-## 8. Platform Recommendation
-
-| Phase | Platform | Cost | Why |
-|---|---|---|---|
-| Early (friends/beta) | Railway | Free/$5 | Zero config, auto-deploy from GitHub |
-| Production | Fly.io | ~$5-10/month | More control, multi-region, Docker-based |
+| `DATABASE_URL` | Supabase dashboard → Project Settings → Database |
+| `GEMINI_API_KEY` | Google AI Studio → API Keys |
+| `TELEGRAM_TOKEN` | @BotFather on Telegram |
+| `TELEGRAM_CHAT_ID` | Your Telegram chat ID |

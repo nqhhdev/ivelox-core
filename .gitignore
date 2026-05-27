@@ -7,3 +7,13 @@ financial/
 # Agent skills (local tooling, not project code)
 claude/skills/
 skills-lock.json
+
+# macOS
+.DS_Store
+internal/.DS_Store
+
+# Build artifacts (root-level binaries)
+/server
+/jobfinder
+coverage.html
+coverage.out

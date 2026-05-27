@@ -4,18 +4,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/nqhhdev/ivelox-core/internal/middleware"
 	"github.com/nqhhdev/ivelox-core/internal/usecase"
-	swaggerFiles "github.com/swaggo/files"
-	ginSwagger "github.com/swaggo/gin-swagger"
-
-	_ "github.com/nqhhdev/ivelox-core/docs" // swagger generated docs
 )
 
 func NewRouter(frontendURL, jwtSecret string, authUC *usecase.AuthUsecase) *gin.Engine {
 	r := gin.Default()
 	r.Use(middleware.CORS(frontendURL))
-
-	// Swagger UI
-	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	authHandler := NewAuthHandler(authUC)
 
