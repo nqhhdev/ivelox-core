@@ -80,31 +80,40 @@ func (r *Runner) Run(ctx context.Context) {
 	scored := r.scoreAll(ctx, newJobs)
 	log.Printf("[jobfinder] %d jobs scored >= %d", len(scored), scoreThreshold)
 
+	// 4. Mark ALL fetched jobs as seen (regardless of score) so they are not
+	// re-scored on the next run. Jobs below threshold are recorded with score=0.
+	allEntries := make([]dedup.SeenEntry, len(newJobs))
+	scoredByURL := make(map[string]scorer.ScoredJob, len(scored))
+	for _, sj := range scored {
+		scoredByURL[sj.ApplyURL] = sj
+	}
+	for i, j := range newJobs {
+		e := dedup.SeenEntry{
+			URL:     j.ApplyURL,
+			Title:   j.Title,
+			Company: j.Company,
+			Source:  j.Source,
+			Score:   0,
+		}
+		if sj, ok := scoredByURL[j.ApplyURL]; ok {
+			e.Score = sj.Score
+		}
+		allEntries[i] = e
+	}
+	if err := r.dedup.MarkSeen(ctx, allEntries); err != nil {
+		log.Printf("[jobfinder] mark seen error: %v", err)
+	}
+
 	if len(scored) == 0 {
 		return
 	}
 
-	// 4. Notify via Telegram
+	// 5. Notify via Telegram
 	r.notifier.Notify(scored)
 
-	// 5. Call onNotify hook if set (registers jobs in bot for chat sessions)
+	// 6. Call onNotify hook if set (registers jobs in bot for chat sessions)
 	if r.onNotify != nil {
 		r.onNotify(scored)
-	}
-
-	// 6. Mark as seen
-	entries := make([]dedup.SeenEntry, len(scored))
-	for i, sj := range scored {
-		entries[i] = dedup.SeenEntry{
-			URL:     sj.ApplyURL,
-			Title:   sj.Title,
-			Company: sj.Company,
-			Source:  sj.Source,
-			Score:   sj.Score,
-		}
-	}
-	if err := r.dedup.MarkSeen(ctx, entries); err != nil {
-		log.Printf("[jobfinder] mark seen error: %v", err)
 	}
 
 	// 7. Cleanup old entries (opportunistic — errors are non-fatal)

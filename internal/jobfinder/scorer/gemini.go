@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -80,6 +81,7 @@ func (s *Scorer) Score(ctx context.Context, job fetcher.RawJob, threshold int) (
 		return nil, fmt.Errorf("gemini json parse: %w (raw: %s)", err, raw)
 	}
 
+	log.Printf("[scorer] %q @ %s → score=%d", job.Title, job.Company, result.Score)
 	if result.Score < threshold {
 		return nil, nil
 	}
