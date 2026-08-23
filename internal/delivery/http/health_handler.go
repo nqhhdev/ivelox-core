@@ -39,6 +39,8 @@ func healthError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, usecase.ErrInvalidInput):
 		c.JSON(http.StatusBadRequest, gin.H{"error": msg})
+	case errors.Is(err, usecase.ErrUnavailable):
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": msg})
 	case strings.Contains(strings.ToLower(msg), "not found"):
 		c.JSON(http.StatusNotFound, gin.H{"error": msg})
 	default:

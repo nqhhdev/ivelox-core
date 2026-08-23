@@ -176,6 +176,21 @@ func TestResolveFood_SuccessShape(t *testing.T) {
 	}
 }
 
+func TestResolveFood_Unavailable(t *testing.T) {
+	food := &fakeFoodResolveUC{err: usecase.ErrUnavailable}
+	r := setupHealthRouter(food, &fakeMealUC{})
+
+	req := authReq(t, http.MethodPost, "/api/v1/health/foods/resolve", map[string]any{
+		"text": "pho bo",
+	}, uuid.New())
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 503 {
+		t.Fatalf("expected 503, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
 func TestResolveFood_EmptyBody(t *testing.T) {
 	food := &fakeFoodResolveUC{
 		err: fmt.Errorf("%w: text or image is required", usecase.ErrInvalidInput),

@@ -21,6 +21,9 @@ const (
 // ErrInvalidInput is a 400-class error for empty text with no image.
 var ErrInvalidInput = errors.New("invalid input")
 
+// ErrUnavailable is a 503-class error when the AI nutrition resolver is not configured.
+var ErrUnavailable = errors.New("nutrition resolver unavailable")
+
 type FoodResolveInput struct {
 	Text       string
 	Quantity   *float64
@@ -63,7 +66,17 @@ func (uc *FoodResolveUsecase) Resolve(ctx context.Context, in FoodResolveInput) 
 	return uc.resolveText(ctx, in)
 }
 
+func (uc *FoodResolveUsecase) requireResolver() error {
+	if uc.resolver == nil {
+		return ErrUnavailable
+	}
+	return nil
+}
+
 func (uc *FoodResolveUsecase) resolveImage(ctx context.Context, in FoodResolveInput) (*domain.ResolveResult, error) {
+	if err := uc.requireResolver(); err != nil {
+		return nil, err
+	}
 	result, err := uc.resolver.ResolveImage(ctx, in.ImageBytes, in.ImageMIME, in.Text)
 	if err != nil {
 		return nil, err
@@ -76,6 +89,9 @@ func (uc *FoodResolveUsecase) resolveImage(ctx context.Context, in FoodResolveIn
 }
 
 func (uc *FoodResolveUsecase) resolveText(ctx context.Context, in FoodResolveInput) (*domain.ResolveResult, error) {
+	if err := uc.requireResolver(); err != nil {
+		return nil, err
+	}
 	result, err := uc.resolver.ResolveText(ctx, in.Text, in.Quantity, in.Unit)
 	if err != nil {
 		return nil, err

@@ -15,13 +15,13 @@ import (
 func ptr[T any](v T) *T { return &v }
 
 type fakeFoodCacheRepo struct {
-	items      map[string]*domain.FoodCache
-	getCalls   int
-	getNames   []string
-	upserts    []domain.FoodItem
-	upsertSrc  []string
-	getErr     error
-	upsertErr  error
+	items     map[string]*domain.FoodCache
+	getCalls  int
+	getNames  []string
+	upserts   []domain.FoodItem
+	upsertSrc []string
+	getErr    error
+	upsertErr error
 }
 
 func (f *fakeFoodCacheRepo) GetByNormalizedName(_ context.Context, name string) (*domain.FoodCache, error) {
@@ -216,6 +216,18 @@ func TestFoodResolve_Image_SkipsCache_UpsertsEach(t *testing.T) {
 	}
 	if len(got.Items) != 2 {
 		t.Errorf("items = %d, want 2", len(got.Items))
+	}
+}
+
+func TestFoodResolve_NilResolver_CacheMiss_ReturnsError(t *testing.T) {
+	uc := usecase.NewFoodResolveUsecase(&fakeFoodCacheRepo{}, nil)
+
+	_, err := uc.Resolve(context.Background(), usecase.FoodResolveInput{Text: "pho bo"})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !errors.Is(err, usecase.ErrUnavailable) {
+		t.Fatalf("error = %v, want ErrUnavailable", err)
 	}
 }
 
