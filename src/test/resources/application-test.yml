@@ -1,0 +1,20 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:ivelox;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  flyway:
+    enabled: true
+
+ivelox:
+  frontend-url: http://localhost:5173
+  jwt-secret: test-secret-key-at-least-32-bytes!!
+  jwt-ttl-seconds: 3600
+  telegram-bot-token: test
+  telegram-chat-id: 1
+  otp-ttl-seconds: 300
+  otp-min-interval-seconds: 30
+  health-enabled: true
+  gemini-api-key:
+  gemini-model: gemini-2.0-flash

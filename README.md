@@ -1,104 +1,30 @@
-# iVelox — Personal Backend Platform
+# iVelox Core — Spring Boot
 
-Go + Gin personal backend platform. Multi-service architecture — auth foundation with pluggable services (job finder, bots, tools, etc.).
+Java 21 + Spring Boot 4 private API (OTP Telegram auth + Health).
 
-**Production:** `https://api.i-velox.app`
-
-## Tech Stack
-
-- Go 1.22+ + Gin
-- Clean Architecture (domain → usecase → repository → delivery)
-- Supabase (PostgreSQL + Auth JWT)
-- Telegram Bot API — notifications & commands
-- Fly.io (Singapore region)
-
-## Project Structure
-
-```
-cmd/server/          — HTTP API entry point
-config/              — env var loading
-internal/
-  domain/            — pure Go structs + repository interfaces
-  usecase/           — business logic
-  repository/        — PostgreSQL implementations
-  delivery/http/     — Gin handlers + router
-  middleware/        — auth (JWT), CORS
-  infrastructure/    — Supabase auth client
-  telegram/          — Telegram bot shell
-tests/
-  integration/       — integration tests (real DB)
-```
-
-## Getting Started
+## Run locally
 
 ```bash
-cp .env.example .env   # fill in your keys
-go mod tidy
-go run ./cmd/server/
+export JAVA_HOME=/opt/homebrew/opt/openjdk@21   # or your JDK 21
+cp .env.example .env   # fill secrets
+./mvnw spring-boot:run
 ```
 
-Server starts at `http://localhost:8080`
+Health: `GET http://localhost:8080/api/v1/health`
 
-```bash
-curl http://localhost:8080/api/v1/health
-# {"status":"ok"}
-```
+## Auth (owner-only)
 
-## Environment Variables
+1. `POST /api/v1/auth/otp/request` — sends OTP to `TELEGRAM_CHAT_ID`
+2. `POST /api/v1/auth/otp/verify` `{"code":"123456"}` — returns JWT
+3. Use `Authorization: Bearer <token>` on protected routes
 
-| Variable | Required | Description |
-|---|---|---|
-| `PORT` | no | HTTP port (default: 8080) |
-| `FRONTEND_URL` | no | CORS allowed origin |
-| `SUPABASE_URL` | yes | Supabase project URL |
-| `SUPABASE_ANON_KEY` | yes | Supabase anon key |
-| `SUPABASE_JWT_SECRET` | yes | JWT secret for token verification |
-| `DATABASE_URL` | yes | PostgreSQL connection string |
-| `TELEGRAM_TOKEN` | yes* | Telegram bot token |
-| `TELEGRAM_CHAT_ID` | yes* | Telegram chat ID for notifications |
-| `GEMINI_API_KEY` | yes* | Google Gemini API key for AI scoring and chat |
+## Legacy Go
 
-`*` Required only when running the Job Finder service (`cmd/jobfinder`). The API server (`cmd/server`) works without them.
+Previous Go implementation is under `legacy/go/` (not built).
 
-## API
+## Docs
 
-Base path: `/api/v1`
-
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| GET | `/health` | — | Health check |
-| POST | `/auth/register` | — | Create account |
-| POST | `/auth/login` | — | Email/password login |
-| POST | `/auth/refresh` | — | Refresh access token |
-| POST | `/auth/verify` | Bearer | Verify JWT + sync profile |
-| POST | `/auth/logout` | Bearer | Revoke session |
-
-## Testing
-
-```bash
-# Unit tests
-export PATH="/opt/homebrew/bin:$PATH" && go test ./... -v
-
-# With race detector
-go test ./... -race -count=1
-
-# Integration tests (requires .env)
-export $(cat .env | grep -v '^#' | xargs) && go test -tags integration ./tests/... -v
-```
-
-## Deploy
-
-```bash
-flyctl secrets set SUPABASE_URL=... SUPABASE_JWT_SECRET=... DATABASE_URL=...
-flyctl deploy
-```
-
-See `docs/deployment.md` for full guide.
-
-## CI/CD
-
-| Workflow | Trigger | Jobs |
-|---|---|---|
-| `ci.yml` | Push & PR | build + test |
-| `deploy.yml` | Push to `main` | build → test → deploy |
-| `review.yml` | PRs | gofmt + vet + staticcheck |
+- Spec: `docs/superpowers/specs/2026-08-23-spring-boot-private-platform-design.md`
+- Plan P1: `docs/superpowers/plans/2026-08-23-spring-boot-p1-otp-auth.md`
+- Plan P2: `docs/superpowers/plans/2026-08-23-spring-boot-p2-health-apis.md`
+- Plan P4 cutover: `docs/superpowers/plans/2026-08-23-spring-boot-p4-fly-cutover.md`

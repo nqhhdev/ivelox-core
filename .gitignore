@@ -18,3 +18,12 @@ internal/.DS_Store
 coverage.html
 coverage.out
 .worktrees/
+
+# Java
+target/
+.idea/
+*.iml
+data/
+*.db
+*.mv.db
+*.trace.db

@@ -12,17 +12,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
         with:
-          go-version: "1.23"
-          cache: true
-
-      - name: Build
-        run: go build ./...
+          distribution: temurin
+          java-version: "21"
+          cache: maven
 
       - name: Test
-        run: go test ./... -count=1
+        run: ./mvnw -B test
 
       - name: Setup flyctl
         uses: superfly/flyctl-actions/setup-flyctl@master
