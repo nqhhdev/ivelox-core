@@ -1,0 +1,28 @@
+server:
+  port: ${PORT:8080}
+
+ivelox:
+  frontend-url: ${FRONTEND_URL:http://localhost:5173}
+  jwt-secret: ${JWT_SECRET:dev-change-me-use-a-long-secret-key-32b}
+  jwt-ttl-seconds: ${JWT_TTL_SECONDS:3600}
+  telegram-bot-token: ${TELEGRAM_BOT_TOKEN:}
+  telegram-chat-id: ${TELEGRAM_CHAT_ID:}
+  otp-ttl-seconds: ${OTP_TTL_SECONDS:300}
+  otp-min-interval-seconds: ${OTP_MIN_INTERVAL_SECONDS:30}
+  health-enabled: ${HEALTH_ENABLED:true}
+  gemini-api-key: ${GEMINI_API_KEY:}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+spring:
+  application:
+    name: ivelox-core
+
+logging:
+  level:
+    root: INFO
+    com.ivelox: INFO

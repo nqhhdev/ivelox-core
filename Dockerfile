@@ -1,33 +1,16 @@
-# Build stage
-FROM golang:1.25-alpine AS builder
+# syntax=docker/dockerfile:1
 
+FROM eclipse-temurin:21-jdk-alpine AS build
+WORKDIR /workspace
+COPY mvnw pom.xml ./
+COPY .mvn .mvn
+RUN chmod +x mvnw && ./mvnw -q -DskipTests dependency:go-offline
+COPY src src
+RUN ./mvnw -q -DskipTests package
+
+FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
-
-COPY go.mod go.sum ./
-RUN go mod download
-
-COPY . .
-
-RUN CGO_ENABLED=0 GOOS=linux go build -o server ./cmd/server
-RUN CGO_ENABLED=0 GOOS=linux go build -o jobfinder ./cmd/jobfinder
-
-# ─── API server ───────────────────────────────────────────────────────────────
-FROM alpine:3.20 AS server
-
-WORKDIR /app
-RUN apk --no-cache add ca-certificates tzdata
-
-COPY --from=builder /app/server .
-
+COPY --from=build /workspace/target/ivelox-core-*.jar /app/app.jar
+ENV PORT=8080
 EXPOSE 8080
-CMD ["./server"]
-
-# ─── Job finder worker ────────────────────────────────────────────────────────
-FROM alpine:3.20 AS jobfinder
-
-WORKDIR /app
-RUN apk --no-cache add ca-certificates tzdata
-
-COPY --from=builder /app/jobfinder .
-
-CMD ["./jobfinder"]
+ENTRYPOINT ["java","-jar","/app/app.jar"]

@@ -1,0 +1,11 @@
+app = "ivelox-jobfinder"
+primary_region = "sin"
+
+[build]
+  dockerfile = "Dockerfile"
+  target = "jobfinder"
+
+# Background worker — no HTTP service, must not be auto-stopped
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
