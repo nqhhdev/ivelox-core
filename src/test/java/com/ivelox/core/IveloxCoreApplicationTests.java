@@ -2,14 +2,10 @@ package com.ivelox.core;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.ActiveProfiles;
 
 @SpringBootTest
-@TestPropertySource(properties = {
-        "ivelox.jwt-secret=test-secret-key-at-least-32-bytes!!",
-        "ivelox.telegram-bot-token=test",
-        "ivelox.telegram-chat-id=1"
-})
+@ActiveProfiles("test")
 class IveloxCoreApplicationTests {
 
     @Test

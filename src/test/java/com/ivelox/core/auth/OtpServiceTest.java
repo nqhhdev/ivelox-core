@@ -30,7 +30,8 @@ class OtpServiceTest {
                 300,
                 0,
                 true,
-                ""
+                "",
+                "gemini-2.0-flash"
         );
         TelegramClient telegram = mock(TelegramClient.class);
         doNothing().when(telegram).sendMessage(anyString());

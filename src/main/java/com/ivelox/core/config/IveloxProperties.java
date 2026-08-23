@@ -12,6 +12,7 @@ public record IveloxProperties(
         long otpTtlSeconds,
         long otpMinIntervalSeconds,
         boolean healthEnabled,
-        String geminiApiKey
+        String geminiApiKey,
+        String geminiModel
 ) {
 }

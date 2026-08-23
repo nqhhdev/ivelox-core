@@ -23,3 +23,7 @@ coverage.out
 target/
 .idea/
 *.iml
+data/
+*.db
+*.mv.db
+*.trace.db

@@ -26,3 +26,5 @@ Previous Go implementation is under `legacy/go/` (not built).
 
 - Spec: `docs/superpowers/specs/2026-08-23-spring-boot-private-platform-design.md`
 - Plan P1: `docs/superpowers/plans/2026-08-23-spring-boot-p1-otp-auth.md`
+- Plan P2: `docs/superpowers/plans/2026-08-23-spring-boot-p2-health-apis.md`
+- Plan P4 cutover: `docs/superpowers/plans/2026-08-23-spring-boot-p4-fly-cutover.md`
