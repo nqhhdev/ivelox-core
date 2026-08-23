@@ -57,7 +57,9 @@ func newTestRouter(t *testing.T) *gin.Engine {
 	userRepo := postgres.NewUserRepository(pool)
 	authClient := supabase.NewAuthClient(supabaseURL, anonKey)
 	uc := usecase.NewAuthUsecase(userRepo, authClient)
-	return httpdelivery.NewRouter("http://localhost:5173", jwtSecret, uc)
+	foodUC := usecase.NewFoodResolveUsecase(postgres.NewFoodCacheRepository(pool), nil)
+	mealUC := usecase.NewMealUsecase(postgres.NewMealLogRepository(pool))
+	return httpdelivery.NewRouter("http://localhost:5173", jwtSecret, uc, foodUC, mealUC)
 }
 
 func makeIntegrationToken(userID uuid.UUID, secret string) string {

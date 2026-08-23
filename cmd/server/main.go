@@ -17,6 +17,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nqhhdev/ivelox-core/config"
 	httpdelivery "github.com/nqhhdev/ivelox-core/internal/delivery/http"
+	"github.com/nqhhdev/ivelox-core/internal/domain"
+	"github.com/nqhhdev/ivelox-core/internal/infrastructure/gemini"
 	"github.com/nqhhdev/ivelox-core/internal/infrastructure/supabase"
 	"github.com/nqhhdev/ivelox-core/internal/repository/postgres"
 	"github.com/nqhhdev/ivelox-core/internal/usecase"
@@ -35,7 +37,25 @@ func main() {
 	authClient := supabase.NewAuthClient(cfg.SupabaseURL, cfg.SupabaseAnonKey)
 	authUC := usecase.NewAuthUsecase(userRepo, authClient)
 
-	router := httpdelivery.NewRouter(cfg.FrontendURL, cfg.SupabaseJWTSecret, authUC)
+	foodRepo := postgres.NewFoodCacheRepository(db)
+	mealRepo := postgres.NewMealLogRepository(db)
+
+	var nutrition domain.NutritionResolver
+	if cfg.GeminiAPIKey == "" {
+		log.Println("warning: GEMINI_API_KEY is empty; food resolve that needs AI will fail at runtime")
+	} else {
+		client, err := gemini.NewNutritionClient(context.Background(), cfg.GeminiAPIKey)
+		if err != nil {
+			log.Fatalf("failed to create gemini nutrition client: %v", err)
+		}
+		defer client.Close()
+		nutrition = client
+	}
+
+	foodUC := usecase.NewFoodResolveUsecase(foodRepo, nutrition)
+	mealUC := usecase.NewMealUsecase(mealRepo)
+
+	router := httpdelivery.NewRouter(cfg.FrontendURL, cfg.SupabaseJWTSecret, authUC, foodUC, mealUC)
 
 	addr := fmt.Sprintf(":%s", cfg.Port)
 	log.Printf("Server starting on %s", addr)

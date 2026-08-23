@@ -6,11 +6,12 @@ import (
 	"github.com/nqhhdev/ivelox-core/internal/usecase"
 )
 
-func NewRouter(frontendURL, jwtSecret string, authUC *usecase.AuthUsecase) *gin.Engine {
+func NewRouter(frontendURL, jwtSecret string, authUC *usecase.AuthUsecase, foodUC *usecase.FoodResolveUsecase, mealUC *usecase.MealUsecase) *gin.Engine {
 	r := gin.Default()
 	r.Use(middleware.CORS(frontendURL))
 
 	authHandler := NewAuthHandler(authUC)
+	healthHandler := NewHealthHandler(foodUC, mealUC)
 
 	api := r.Group("/api/v1")
 	{
@@ -29,6 +30,12 @@ func NewRouter(frontendURL, jwtSecret string, authUC *usecase.AuthUsecase) *gin.
 		{
 			protected.POST("/auth/verify", authHandler.Verify)
 			protected.POST("/auth/logout", authHandler.Logout)
+
+			protected.POST("/health/foods/resolve", healthHandler.ResolveFood)
+			protected.POST("/health/meals", healthHandler.CreateMeal)
+			protected.GET("/health/meals", healthHandler.ListMeals)
+			protected.DELETE("/health/meals/:id", healthHandler.DeleteMeal)
+			protected.GET("/health/check/today", healthHandler.TodayCheck)
 		}
 	}
 
