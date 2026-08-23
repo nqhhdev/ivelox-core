@@ -17,3 +17,4 @@ internal/.DS_Store
 /jobfinder
 coverage.html
 coverage.out
+.worktrees/
