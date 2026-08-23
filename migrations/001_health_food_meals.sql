@@ -28,9 +28,9 @@ create table if not exists public.meal_logs (
   quantity numeric not null check (quantity > 0),
   unit text not null check (unit in ('g', 'ml', 'serving', 'piece')),
   kcal numeric not null check (kcal >= 0),
-  protein_g numeric not null default 0,
-  carb_g numeric not null default 0,
-  fat_g numeric not null default 0,
+  protein_g numeric not null default 0 check (protein_g >= 0),
+  carb_g numeric not null default 0 check (carb_g >= 0),
+  fat_g numeric not null default 0 check (fat_g >= 0),
   meal_type text check (meal_type is null or meal_type in ('breakfast', 'lunch', 'dinner', 'snack')),
   logged_at timestamptz not null default now(),
   created_at timestamptz not null default now()
@@ -38,3 +38,10 @@ create table if not exists public.meal_logs (
 
 create index if not exists meal_logs_user_logged_at_idx
   on public.meal_logs (user_id, logged_at desc);
+
+-- RLS: no policies = deny for roles subject to RLS.
+-- postgres / service_role (BE pooler) bypass RLS.
+alter table public.food_cache enable row level security;
+alter table public.meal_logs enable row level security;
+revoke all on table public.food_cache from anon, authenticated;
+revoke all on table public.meal_logs from anon, authenticated;

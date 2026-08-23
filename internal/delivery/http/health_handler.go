@@ -11,8 +11,18 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/nqhhdev/ivelox-core/internal/domain"
+	"github.com/nqhhdev/ivelox-core/internal/health"
 	"github.com/nqhhdev/ivelox-core/internal/usecase"
 )
+
+const maxImageDecodedBytes = 3 << 20 // 3 MiB
+
+var allowedImageMIMEs = map[string]struct{}{
+	"image/jpeg": {},
+	"image/png":  {},
+	"image/webp": {},
+	"image/gif":  {},
+}
 
 type foodResolver interface {
 	Resolve(ctx context.Context, in usecase.FoodResolveInput) (*domain.ResolveResult, error)
@@ -35,17 +45,35 @@ func NewHealthHandler(foodUC foodResolver, mealUC mealService) *HealthHandler {
 }
 
 func healthError(c *gin.Context, err error) {
-	msg := err.Error()
 	switch {
 	case errors.Is(err, usecase.ErrInvalidInput):
-		c.JSON(http.StatusBadRequest, gin.H{"error": msg})
-	case errors.Is(err, usecase.ErrUnavailable):
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": msg})
-	case strings.Contains(strings.ToLower(msg), "not found"):
-		c.JSON(http.StatusNotFound, gin.H{"error": msg})
+		c.JSON(http.StatusBadRequest, gin.H{"error": safeClientMessage(err, "invalid input")})
+	case errors.Is(err, usecase.ErrUnavailable), isResolverTimeout(err):
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "nutrition resolver unavailable"})
+	case strings.Contains(strings.ToLower(err.Error()), "not found"):
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 	default:
-		c.JSON(http.StatusInternalServerError, gin.H{"error": msg})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 	}
+}
+
+func safeClientMessage(err error, fallback string) string {
+	msg := strings.TrimSpace(err.Error())
+	if msg == "" || strings.Contains(msg, "\n") {
+		return fallback
+	}
+	return msg
+}
+
+func isResolverTimeout(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		return true
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "timeout") || strings.Contains(msg, "deadline exceeded")
 }
 
 func parseUserID(c *gin.Context) (uuid.UUID, bool) {
@@ -63,7 +91,7 @@ func parseDateQuery(c *gin.Context) (time.Time, bool) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "date is required (YYYY-MM-DD)"})
 		return time.Time{}, false
 	}
-	day, err := time.ParseInLocation("2006-01-02", raw, time.UTC)
+	day, err := health.ParseCivilDate(raw)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "date must be YYYY-MM-DD"})
 		return time.Time{}, false
@@ -81,6 +109,15 @@ func parseFoodUnit(s string) (domain.FoodUnit, bool) {
 	}
 }
 
+func validMealType(s string) bool {
+	switch s {
+	case "breakfast", "lunch", "dinner", "snack":
+		return true
+	default:
+		return false
+	}
+}
+
 func decodeImageBase64(s string) ([]byte, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -91,6 +128,24 @@ func decodeImageBase64(s string) ([]byte, error) {
 		return nil, err
 	}
 	return b, nil
+}
+
+func allowedImageMIME(mime string) bool {
+	_, ok := allowedImageMIMEs[strings.ToLower(strings.TrimSpace(mime))]
+	return ok
+}
+
+func validateResolveImage(decoded []byte, mime string) error {
+	if len(decoded) == 0 {
+		return nil
+	}
+	if len(decoded) > maxImageDecodedBytes {
+		return errors.New("image too large")
+	}
+	if !allowedImageMIME(mime) {
+		return errors.New("unsupported image_mime")
+	}
+	return nil
 }
 
 func mealLogResponse(m *domain.MealLog) MealLogResponse {
@@ -153,10 +208,16 @@ func (h *HealthHandler) ResolveFood(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid image_base64"})
 			return
 		}
+		mime := ""
+		if req.ImageMIME != nil {
+			mime = *req.ImageMIME
+		}
+		if err := validateResolveImage(img, mime); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
 		in.ImageBytes = img
-	}
-	if req.ImageMIME != nil {
-		in.ImageMIME = *req.ImageMIME
+		in.ImageMIME = mime
 	}
 
 	result, err := h.foodUC.Resolve(c.Request.Context(), in)
@@ -196,6 +257,13 @@ func (h *HealthHandler) CreateMeal(c *gin.Context) {
 	if !ok {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid unit"})
 		return
+	}
+	if req.MealType != nil {
+		mt := strings.TrimSpace(*req.MealType)
+		if mt != "" && !validMealType(mt) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid meal_type"})
+			return
+		}
 	}
 
 	in := usecase.CreateMealInput{

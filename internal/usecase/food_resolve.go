@@ -79,7 +79,7 @@ func (uc *FoodResolveUsecase) resolveImage(ctx context.Context, in FoodResolveIn
 	}
 	result, err := uc.resolver.ResolveImage(ctx, in.ImageBytes, in.ImageMIME, in.Text)
 	if err != nil {
-		return nil, err
+		return nil, wrapResolverErr(err)
 	}
 	if err := uc.upsertItems(ctx, result.Items); err != nil {
 		return nil, err
@@ -94,7 +94,7 @@ func (uc *FoodResolveUsecase) resolveText(ctx context.Context, in FoodResolveInp
 	}
 	result, err := uc.resolver.ResolveText(ctx, in.Text, in.Quantity, in.Unit)
 	if err != nil {
-		return nil, err
+		return nil, wrapResolverErr(err)
 	}
 	if err := uc.upsertItems(ctx, result.Items); err != nil {
 		return nil, err
@@ -164,6 +164,16 @@ func resultFromCache(cached *domain.FoodCache, in FoodResolveInput) *domain.Reso
 		}},
 		Source: resolveSourceCache,
 	}
+}
+
+func wrapResolverErr(err error) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, ErrInvalidInput) || errors.Is(err, ErrUnavailable) {
+		return err
+	}
+	return fmt.Errorf("%w", ErrUnavailable)
 }
 
 func isNotFound(err error) bool {

@@ -231,6 +231,20 @@ func TestFoodResolve_NilResolver_CacheMiss_ReturnsError(t *testing.T) {
 	}
 }
 
+func TestFoodResolve_ResolverError_MapsUnavailable(t *testing.T) {
+	uc := usecase.NewFoodResolveUsecase(&fakeFoodCacheRepo{}, &fakeNutritionResolver{
+		textErr: fmt.Errorf("gemini generate: secret api key xyz"),
+	})
+
+	_, err := uc.Resolve(context.Background(), usecase.FoodResolveInput{Text: "pho bo"})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !errors.Is(err, usecase.ErrUnavailable) {
+		t.Fatalf("error = %v, want ErrUnavailable", err)
+	}
+}
+
 func TestFoodResolve_EmptyTextNoImage_InvalidInput(t *testing.T) {
 	uc := usecase.NewFoodResolveUsecase(&fakeFoodCacheRepo{}, &fakeNutritionResolver{})
 

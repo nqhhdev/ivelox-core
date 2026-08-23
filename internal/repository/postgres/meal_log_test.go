@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nqhhdev/ivelox-core/internal/domain"
+	"github.com/nqhhdev/ivelox-core/internal/health"
 	"github.com/nqhhdev/ivelox-core/internal/repository/postgres"
 )
 
@@ -61,10 +62,12 @@ func TestMealLogRepository_CreateListSummarizeDelete(t *testing.T) {
 	ctx := context.Background()
 	userID := mealLogTestUserID(t, pool)
 
-	// Far-future UTC day so summary/list assertions are isolated from real data.
-	start := time.Date(2099, 1, 15, 0, 0, 0, 0, time.UTC)
-	end := start.AddDate(0, 0, 1)
-	day := start.Add(12 * time.Hour)
+	// Far-future civil day (ICT) so summary/list assertions are isolated from real data.
+	day, err := health.ParseCivilDate("2099-01-15")
+	if err != nil {
+		t.Fatal(err)
+	}
+	start, end := health.CivilDayBounds(day)
 
 	breakfast := "breakfast"
 	inDay := &domain.MealLog{
@@ -116,7 +119,7 @@ func TestMealLogRepository_CreateListSummarizeDelete(t *testing.T) {
 	for _, m := range listed {
 		ids[m.ID] = true
 		if m.LoggedAt.Before(start) || !m.LoggedAt.Before(end) {
-			t.Fatalf("listed meal outside UTC day bounds: %v", m.LoggedAt)
+			t.Fatalf("listed meal outside civil day bounds: %v", m.LoggedAt)
 		}
 	}
 	if !ids[inDay.ID] || !ids[edge.ID] {

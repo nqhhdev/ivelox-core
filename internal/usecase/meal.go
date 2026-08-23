@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -31,12 +32,32 @@ func NewMealUsecase(meals domain.MealLogRepository) *MealUsecase {
 	return &MealUsecase{meals: meals}
 }
 
+func validMealType(s string) bool {
+	switch s {
+	case "breakfast", "lunch", "dinner", "snack":
+		return true
+	default:
+		return false
+	}
+}
+
 func (uc *MealUsecase) Create(ctx context.Context, in CreateMealInput) (*domain.MealLog, error) {
 	if in.Quantity <= 0 {
 		return nil, fmt.Errorf("%w: quantity must be > 0", ErrInvalidInput)
 	}
-	if in.Kcal < 0 {
-		return nil, fmt.Errorf("%w: kcal must be >= 0", ErrInvalidInput)
+	if in.Kcal < 0 || in.ProteinG < 0 || in.CarbG < 0 || in.FatG < 0 {
+		return nil, fmt.Errorf("%w: macros must be >= 0", ErrInvalidInput)
+	}
+
+	var mealType *string
+	if in.MealType != nil {
+		mt := strings.TrimSpace(*in.MealType)
+		if mt != "" {
+			if !validMealType(mt) {
+				return nil, fmt.Errorf("%w: invalid meal_type", ErrInvalidInput)
+			}
+			mealType = &mt
+		}
 	}
 
 	loggedAt := time.Now().UTC()
@@ -54,7 +75,7 @@ func (uc *MealUsecase) Create(ctx context.Context, in CreateMealInput) (*domain.
 		ProteinG:    in.ProteinG,
 		CarbG:       in.CarbG,
 		FatG:        in.FatG,
-		MealType:    in.MealType,
+		MealType:    mealType,
 		LoggedAt:    loggedAt,
 	}
 	if err := uc.meals.Create(ctx, m); err != nil {

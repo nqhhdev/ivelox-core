@@ -2,10 +2,12 @@ package http_test
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	httpdelivery "github.com/nqhhdev/ivelox-core/internal/delivery/http"
 	"github.com/nqhhdev/ivelox-core/internal/domain"
+	"github.com/nqhhdev/ivelox-core/internal/health"
 	"github.com/nqhhdev/ivelox-core/internal/middleware"
 	"github.com/nqhhdev/ivelox-core/internal/usecase"
 )
@@ -346,8 +349,111 @@ func TestTodayCheck_Success(t *testing.T) {
 	if meal.lastUser != userID {
 		t.Errorf("userID = %s, want %s", meal.lastUser, userID)
 	}
-	wantDay := time.Date(2026, 8, 23, 0, 0, 0, 0, time.UTC)
+	wantDay, err := health.ParseCivilDate("2026-08-23")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !meal.lastDay.Equal(wantDay) {
 		t.Errorf("day = %v, want %v", meal.lastDay, wantDay)
+	}
+}
+
+func TestHealthError_InternalDoesNotLeak(t *testing.T) {
+	meal := &fakeMealUC{listErr: fmt.Errorf("pq: password authentication failed for user postgres")}
+	r := setupHealthRouter(&fakeFoodResolveUC{}, meal)
+
+	req := authReq(t, http.MethodGet, "/api/v1/health/meals?date=2026-08-23", nil, uuid.New())
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 500 {
+		t.Fatalf("expected 500, got %d: %s", w.Code, w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), "password") || strings.Contains(w.Body.String(), "postgres") {
+		t.Fatalf("leaked internal error: %s", w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "internal server error") {
+		t.Fatalf("body = %s, want internal server error", w.Body.String())
+	}
+}
+
+func TestResolveFood_ResolverError_503SafeMessage(t *testing.T) {
+	food := &fakeFoodResolveUC{err: fmt.Errorf("%w", usecase.ErrUnavailable)}
+	r := setupHealthRouter(food, &fakeMealUC{})
+
+	req := authReq(t, http.MethodPost, "/api/v1/health/foods/resolve", map[string]any{
+		"text": "pho bo",
+	}, uuid.New())
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 503 {
+		t.Fatalf("expected 503, got %d: %s", w.Code, w.Body.String())
+	}
+	if strings.Contains(strings.ToLower(w.Body.String()), "gemini") {
+		t.Fatalf("leaked resolver details: %s", w.Body.String())
+	}
+}
+
+func TestResolveFood_Timeout_503(t *testing.T) {
+	food := &fakeFoodResolveUC{err: context.DeadlineExceeded}
+	r := setupHealthRouter(food, &fakeMealUC{})
+
+	req := authReq(t, http.MethodPost, "/api/v1/health/foods/resolve", map[string]any{
+		"text": "pho bo",
+	}, uuid.New())
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 503 {
+		t.Fatalf("expected 503, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestResolveFood_RejectsUnsupportedMIME(t *testing.T) {
+	r := setupHealthRouter(&fakeFoodResolveUC{}, &fakeMealUC{})
+	req := authReq(t, http.MethodPost, "/api/v1/health/foods/resolve", map[string]any{
+		"text":         "pho",
+		"image_base64": "aGVsbG8=",
+		"image_mime":   "application/pdf",
+	}, uuid.New())
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 400 {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestResolveFood_RejectsOversizedImage(t *testing.T) {
+	r := setupHealthRouter(&fakeFoodResolveUC{}, &fakeMealUC{})
+	raw := make([]byte, 3<<20+1)
+	req := authReq(t, http.MethodPost, "/api/v1/health/foods/resolve", map[string]any{
+		"text":         "pho",
+		"image_base64": base64.StdEncoding.EncodeToString(raw),
+		"image_mime":   "image/jpeg",
+	}, uuid.New())
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 400 {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestCreateMeal_InvalidMealType(t *testing.T) {
+	r := setupHealthRouter(&fakeFoodResolveUC{}, &fakeMealUC{})
+	req := authReq(t, http.MethodPost, "/api/v1/health/meals", map[string]any{
+		"raw_input": "pho",
+		"quantity":  1,
+		"unit":      "serving",
+		"kcal":      100,
+		"meal_type": "brunch",
+	}, uuid.New())
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 400 {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
 	}
 }

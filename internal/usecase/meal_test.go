@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nqhhdev/ivelox-core/internal/domain"
+	"github.com/nqhhdev/ivelox-core/internal/health"
 	"github.com/nqhhdev/ivelox-core/internal/usecase"
 )
 
@@ -44,7 +45,7 @@ func (f *fakeMealLogRepo) ListByUserDate(_ context.Context, userID uuid.UUID, da
 	if f.listErr != nil {
 		return nil, f.listErr
 	}
-	start, end := utcDayBounds(day)
+	start, end := health.CivilDayBounds(day)
 	var out []domain.MealLog
 	for _, m := range f.meals {
 		if m.UserID != userID {
@@ -77,7 +78,7 @@ func (f *fakeMealLogRepo) SummarizeDay(_ context.Context, userID uuid.UUID, day 
 	if f.sumErr != nil {
 		return nil, f.sumErr
 	}
-	start, end := utcDayBounds(day)
+	start, end := health.CivilDayBounds(day)
 	var s domain.DayMealSummary
 	for _, m := range f.meals {
 		if m.UserID != userID {
@@ -93,13 +94,6 @@ func (f *fakeMealLogRepo) SummarizeDay(_ context.Context, userID uuid.UUID, day 
 		s.MealCount++
 	}
 	return &s, nil
-}
-
-func utcDayBounds(day time.Time) (start, end time.Time) {
-	y, m, d := day.UTC().Date()
-	start = time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
-	end = start.AddDate(0, 0, 1)
-	return start, end
 }
 
 func validCreateInput(userID uuid.UUID) usecase.CreateMealInput {
@@ -135,6 +129,40 @@ func TestMeal_Create_RejectsNegativeKcal(t *testing.T) {
 	uc := usecase.NewMealUsecase(repo)
 	in := validCreateInput(uuid.New())
 	in.Kcal = -1
+
+	_, err := uc.Create(context.Background(), in)
+	if !errors.Is(err, usecase.ErrInvalidInput) {
+		t.Fatalf("error = %v, want ErrInvalidInput", err)
+	}
+}
+
+func TestMeal_Create_RejectsNegativeMacros(t *testing.T) {
+	uc := usecase.NewMealUsecase(newFakeMealLogRepo())
+	cases := []struct {
+		name string
+		mut  func(*usecase.CreateMealInput)
+	}{
+		{"protein", func(in *usecase.CreateMealInput) { in.ProteinG = -1 }},
+		{"carb", func(in *usecase.CreateMealInput) { in.CarbG = -0.1 }},
+		{"fat", func(in *usecase.CreateMealInput) { in.FatG = -5 }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			in := validCreateInput(uuid.New())
+			tc.mut(&in)
+			_, err := uc.Create(context.Background(), in)
+			if !errors.Is(err, usecase.ErrInvalidInput) {
+				t.Fatalf("error = %v, want ErrInvalidInput", err)
+			}
+		})
+	}
+}
+
+func TestMeal_Create_RejectsInvalidMealType(t *testing.T) {
+	uc := usecase.NewMealUsecase(newFakeMealLogRepo())
+	in := validCreateInput(uuid.New())
+	bad := "brunch"
+	in.MealType = &bad
 
 	_, err := uc.Create(context.Background(), in)
 	if !errors.Is(err, usecase.ErrInvalidInput) {
@@ -243,5 +271,38 @@ func TestMeal_List_ByDay(t *testing.T) {
 	}
 	if listed[0].RawInput != "pho bo" {
 		t.Fatalf("RawInput = %q, want pho bo", listed[0].RawInput)
+	}
+}
+
+func TestMeal_List_IncludesICTMorningOnCivilDate(t *testing.T) {
+	repo := newFakeMealLogRepo()
+	uc := usecase.NewMealUsecase(repo)
+	userID := uuid.New()
+
+	logged := time.Date(2026, 8, 23, 1, 0, 0, 0, health.Location())
+	in := validCreateInput(userID)
+	in.LoggedAt = &logged
+	if _, err := uc.Create(context.Background(), in); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	day, err := health.ParseCivilDate("2026-08-23")
+	if err != nil {
+		t.Fatal(err)
+	}
+	listed, err := uc.List(context.Background(), userID, day)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(listed) != 1 {
+		t.Fatalf("List len = %d, want 1 (ICT 01:00 belongs to civil 2026-08-23)", len(listed))
+	}
+
+	sum, err := uc.TodaySummary(context.Background(), userID, day)
+	if err != nil {
+		t.Fatalf("TodaySummary: %v", err)
+	}
+	if sum.MealCount != 1 {
+		t.Fatalf("TodaySummary MealCount = %d, want 1", sum.MealCount)
 	}
 }

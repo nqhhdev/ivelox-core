@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nqhhdev/ivelox-core/internal/domain"
+	"github.com/nqhhdev/ivelox-core/internal/health"
 )
 
 type MealLogRepository struct {
@@ -22,13 +23,6 @@ var _ domain.MealLogRepository = (*MealLogRepository)(nil)
 
 const mealLogColumns = `id, user_id, food_cache_id, raw_input, image_url, quantity, unit,
 	kcal, protein_g, carb_g, fat_g, meal_type, logged_at`
-
-func utcDayBounds(day time.Time) (start, end time.Time) {
-	y, m, d := day.UTC().Date()
-	start = time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
-	end = start.AddDate(0, 0, 1)
-	return start, end
-}
 
 func (r *MealLogRepository) Create(ctx context.Context, m *domain.MealLog) error {
 	loggedAt := m.LoggedAt
@@ -52,7 +46,7 @@ func (r *MealLogRepository) Create(ctx context.Context, m *domain.MealLog) error
 }
 
 func (r *MealLogRepository) ListByUserDate(ctx context.Context, userID uuid.UUID, day time.Time) ([]domain.MealLog, error) {
-	start, end := utcDayBounds(day)
+	start, end := health.CivilDayBounds(day)
 	rows, err := r.db.Query(ctx,
 		`select `+mealLogColumns+`
 		 from public.meal_logs
@@ -102,7 +96,7 @@ func (r *MealLogRepository) Delete(ctx context.Context, userID, id uuid.UUID) er
 }
 
 func (r *MealLogRepository) SummarizeDay(ctx context.Context, userID uuid.UUID, day time.Time) (*domain.DayMealSummary, error) {
-	start, end := utcDayBounds(day)
+	start, end := health.CivilDayBounds(day)
 	var s domain.DayMealSummary
 	err := r.db.QueryRow(ctx,
 		`select coalesce(sum(kcal),0), coalesce(sum(protein_g),0), coalesce(sum(carb_g),0),
