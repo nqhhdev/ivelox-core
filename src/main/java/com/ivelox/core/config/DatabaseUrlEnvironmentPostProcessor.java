@@ -30,6 +30,23 @@ public class DatabaseUrlEnvironmentPostProcessor implements EnvironmentPostProce
         }
         try {
             Map<String, Object> props = parse(raw);
+            // Also set env-style keys so application.yml ${SPRING_DATASOURCE_URL:...} resolves.
+            Object jdbc = props.get("spring.datasource.url");
+            if (jdbc != null) {
+                props.put("SPRING_DATASOURCE_URL", jdbc);
+            }
+            Object user = props.get("spring.datasource.username");
+            if (user != null) {
+                props.put("SPRING_DATASOURCE_USERNAME", user);
+            }
+            Object pass = props.get("spring.datasource.password");
+            if (pass != null) {
+                props.put("SPRING_DATASOURCE_PASSWORD", pass);
+            }
+            Object driver = props.get("spring.datasource.driver-class-name");
+            if (driver != null) {
+                props.put("SPRING_DATASOURCE_DRIVER", driver);
+            }
             environment.getPropertySources().addFirst(new MapPropertySource("databaseUrl", props));
         } catch (Exception e) {
             throw new IllegalStateException("Invalid DATABASE_URL: " + e.getMessage(), e);
