@@ -9,6 +9,9 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+    # Supabase public schema is non-empty (extensions/default objects).
+    baseline-on-migrate: true
+    baseline-version: 0
 
 server:
   port: ${PORT:8080}
