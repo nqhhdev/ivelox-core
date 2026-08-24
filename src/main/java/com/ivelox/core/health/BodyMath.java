@@ -89,6 +89,16 @@ public final class BodyMath {
         return new MacroTargets(protein, carb, fat);
     }
 
+    /**
+     * Rough adult body-fat % from BMI (Deurenberg-style).
+     * sex: male|female. Educational estimate only.
+     */
+    public static double bodyFatPctFromBmi(double bmi, int ageYears, String sex) {
+        double sexAdj = "female".equalsIgnoreCase(sex) ? 1.0 : 0.0;
+        double est = 1.20 * bmi + 0.23 * ageYears - 10.8 * sexAdj - 5.4;
+        return Math.max(5, Math.min(50, Math.round(est * 10.0) / 10.0));
+    }
+
     private static double clamp(double v, double lo, double hi) {
         return Math.max(lo, Math.min(hi, v));
     }

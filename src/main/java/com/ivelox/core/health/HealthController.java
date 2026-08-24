@@ -5,6 +5,7 @@ import java.time.LocalDate;
 import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -37,17 +38,20 @@ public class HealthController {
     private final FoodResolveService foodResolve;
     private final MealService mealService;
     private final HealthProfileService profile;
+    private final BodyAtlasService bodyAtlas;
 
     public HealthController(
             IveloxProperties props,
             FoodResolveService foodResolve,
             MealService mealService,
-            HealthProfileService profile
+            HealthProfileService profile,
+            BodyAtlasService bodyAtlas
     ) {
         this.props = props;
         this.foodResolve = foodResolve;
         this.mealService = mealService;
         this.profile = profile;
+        this.bodyAtlas = bodyAtlas;
     }
 
     @PostMapping("/foods/resolve")
@@ -192,6 +196,13 @@ public class HealthController {
         requireFeature();
         profile.deleteBurn(ownerId(auth), parseUuid(id, "invalid burn id"));
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/body/atlas")
+    public Map<String, Object> bodyAtlas(Authentication auth) {
+        requireFeature();
+        ownerId(auth);
+        return bodyAtlas.atlas();
     }
 
     @GetMapping("/check/today")
