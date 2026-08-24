@@ -122,11 +122,26 @@ public final class NutritionJsonParser {
                 """.formatted(text, extra, SCHEMA);
     }
 
-    public static String buildImagePrompt(String hint) {
+    public static String buildImagePrompt(String hint, Double quantity, String unit) {
         String hintLine = (hint == null || hint.isBlank()) ? "" : "\nHint from user: " + hint;
+        String qtyLine = "";
+        if (quantity != null || (unit != null && !unit.isBlank())) {
+            String qty = quantity == null ? "unspecified" : String.valueOf(quantity);
+            String u = (unit == null || unit.isBlank()) ? "unspecified" : unit;
+            qtyLine = "\nRequested quantity/serving actually consumed: " + qty + " " + u;
+        }
         return """
                 You are a nutrition estimator. Identify food in the image and estimate calories and macros.
-                Vietnamese dish names are allowed.%s
+                Vietnamese dish names are allowed.%s%s
+
+                If the image shows a printed nutrition facts label (per 100g/100ml or per serving),
+                read the exact values from the label instead of guessing generic averages for that
+                food type. Scale the label's per-100g/serving values to match the requested quantity
+                above (if given) or to the package's stated serving size (if visible). Prefer OCR'd
+                label numbers over estimation whenever the label is legible, and set confidence high
+                (>= 0.9) in that case; note in "notes" that values come from the label.
+                If no label is visible or it is not legible, estimate normally with a lower confidence
+                and say so in "notes".
 
                 Respond in JSON only, no markdown, no explanation, matching this schema:
                 %s
@@ -136,7 +151,7 @@ public final class NutritionJsonParser {
                 - confidence is between 0 and 1
                 - unit must be one of: g, ml, serving, piece
                 - if the image is ambiguous or not food, still return JSON with low confidence and a notes explanation
-                """.formatted(hintLine, SCHEMA);
+                """.formatted(hintLine, qtyLine, SCHEMA);
     }
 
     @SuppressWarnings("unchecked")

@@ -41,7 +41,7 @@ public class FoodResolveService {
 
     private HealthModels.ResolveResult resolveImage(HealthModels.FoodResolveInput in) {
         requireGemini();
-        HealthModels.ResolveResult result = gemini.resolveImage(in.imageBytes(), in.imageMime(), in.text());
+        HealthModels.ResolveResult result = gemini.resolveImage(in.imageBytes(), in.imageMime(), in.text(), in.quantity(), in.unit());
         upsertItems(result.items());
         return new HealthModels.ResolveResult(result.items(), SOURCE_AI, result.notes());
     }

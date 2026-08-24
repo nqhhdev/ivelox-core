@@ -49,7 +49,7 @@ public class GeminiNutritionClient {
         return generate(parts);
     }
 
-    public HealthModels.ResolveResult resolveImage(byte[] imageBytes, String mime, String hint) {
+    public HealthModels.ResolveResult resolveImage(byte[] imageBytes, String mime, String hint, Double quantity, String unit) {
         String mimeType = (mime == null || mime.isBlank()) ? "image/jpeg" : mime;
         Map<String, Object> imagePart = Map.of(
                 "inline_data", Map.of(
@@ -59,7 +59,7 @@ public class GeminiNutritionClient {
         );
         List<Map<String, Object>> parts = new ArrayList<>();
         parts.add(imagePart);
-        parts.add(Map.of("text", NutritionJsonParser.buildImagePrompt(hint)));
+        parts.add(Map.of("text", NutritionJsonParser.buildImagePrompt(hint, quantity, unit)));
         return generate(parts);
     }
 
