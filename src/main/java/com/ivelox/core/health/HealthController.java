@@ -91,7 +91,7 @@ public class HealthController {
         requireFeature();
         String userId = ownerId(auth);
         var meal = mealService.create(userId, req);
-        return ResponseEntity.status(HttpStatus.CREATED).body(HealthModels.MealLogResponse.from(meal));
+        return ResponseEntity.status(HttpStatus.CREATED).body(mealService.toResponse(userId, meal));
     }
 
     @GetMapping("/meals")
@@ -102,8 +102,18 @@ public class HealthController {
         requireFeature();
         String userId = ownerId(auth);
         return mealService.list(userId, parseDate(date)).stream()
-                .map(HealthModels.MealLogResponse::from)
+                .map(m -> mealService.toResponse(userId, m))
                 .toList();
+    }
+
+    @GetMapping("/meals/{id}/image")
+    public ResponseEntity<byte[]> mealImage(Authentication auth, @PathVariable("id") String id) {
+        requireFeature();
+        var img = mealService.getImage(ownerId(auth), parseUuid(id, "invalid meal id"));
+        return ResponseEntity.ok()
+                .header("Content-Type", img.mime())
+                .header("Cache-Control", "private, max-age=86400")
+                .body(img.bytes());
     }
 
     @DeleteMapping("/meals/{id}")
@@ -191,6 +201,35 @@ public class HealthController {
     ) {
         requireFeature();
         return profile.todayCheck(ownerId(auth), parseDate(date));
+    }
+
+    @PostMapping("/check/close-day")
+    public HealthModels.DayCloseResponse closeDay(
+            Authentication auth,
+            @RequestParam(value = "date", required = false) String date
+    ) {
+        requireFeature();
+        LocalDate day = date == null || date.isBlank() ? CivilDay.todayIct() : parseDate(date);
+        return profile.closeDay(ownerId(auth), day);
+    }
+
+    @PutMapping("/meal-slots")
+    public ResponseEntity<Void> mealSlot(
+            Authentication auth,
+            @RequestBody HealthModels.UpsertMealSlotRequest req
+    ) {
+        requireFeature();
+        profile.setMealSlotStatus(ownerId(auth), req);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/weights/daily")
+    public HealthModels.DailyWeightResponse dailyWeight(
+            Authentication auth,
+            @RequestBody HealthModels.DailyWeightRequest req
+    ) {
+        requireFeature();
+        return profile.upsertDailyWeight(ownerId(auth), req);
     }
 
     @GetMapping("/check/weekly")

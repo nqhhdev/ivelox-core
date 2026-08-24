@@ -42,6 +42,10 @@ public class HealthGoalsRepository {
             rs.getDate("start_at") == null ? null : rs.getDate("start_at").toLocalDate(),
             rs.getDate("target_at") == null ? null : rs.getDate("target_at").toLocalDate(),
             rs.getString("meal_plan_json"),
+            rs.getObject("protein_g_target", Integer.class),
+            rs.getObject("carb_g_target", Integer.class),
+            rs.getObject("fat_g_target", Integer.class),
+            rs.getString("meal_types_json"),
             rs.getTimestamp("updated_at").toInstant()
     );
 
@@ -51,7 +55,9 @@ public class HealthGoalsRepository {
                 update health_goals set
                   height_cm = ?, weight_kg = ?, sex = ?, age_years = ?, activity_level = ?,
                   weight_change_pct = ?, weeks = ?, target_weight_kg = ?, daily_kcal_target = ?,
-                  daily_burn_target = ?, start_at = ?, target_at = ?, meal_plan_json = ?, updated_at = ?
+                  daily_burn_target = ?, start_at = ?, target_at = ?, meal_plan_json = ?,
+                  protein_g_target = ?, carb_g_target = ?, fat_g_target = ?, meal_types_json = ?,
+                  updated_at = ?
                 where user_id = ?
                 """,
                 g.heightCm(), g.weightKg(), g.sex(), g.ageYears(), g.activityLevel(),
@@ -59,6 +65,7 @@ public class HealthGoalsRepository {
                 g.startAt() == null ? null : Date.valueOf(g.startAt()),
                 g.targetAt() == null ? null : Date.valueOf(g.targetAt()),
                 g.mealPlanJson(),
+                g.proteinGTarget(), g.carbGTarget(), g.fatGTarget(), g.mealTypesJson(),
                 Timestamp.from(now),
                 g.userId()
         );
@@ -67,14 +74,16 @@ public class HealthGoalsRepository {
                     insert into health_goals (
                       user_id, height_cm, weight_kg, sex, age_years, activity_level,
                       weight_change_pct, weeks, target_weight_kg, daily_kcal_target, daily_burn_target,
-                      start_at, target_at, meal_plan_json, updated_at
-                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                      start_at, target_at, meal_plan_json,
+                      protein_g_target, carb_g_target, fat_g_target, meal_types_json, updated_at
+                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     g.userId(), g.heightCm(), g.weightKg(), g.sex(), g.ageYears(), g.activityLevel(),
                     g.weightChangePct(), g.weeks(), g.targetWeightKg(), g.dailyKcalTarget(), g.dailyBurnTarget(),
                     g.startAt() == null ? null : Date.valueOf(g.startAt()),
                     g.targetAt() == null ? null : Date.valueOf(g.targetAt()),
                     g.mealPlanJson(),
+                    g.proteinGTarget(), g.carbGTarget(), g.fatGTarget(), g.mealTypesJson(),
                     Timestamp.from(now)
             );
         }
@@ -86,7 +95,8 @@ public class HealthGoalsRepository {
                     """
                             select user_id, height_cm, weight_kg, sex, age_years, activity_level,
                                    weight_change_pct, weeks, target_weight_kg, daily_kcal_target, daily_burn_target,
-                                   start_at, target_at, meal_plan_json, updated_at
+                                   start_at, target_at, meal_plan_json,
+                                   protein_g_target, carb_g_target, fat_g_target, meal_types_json, updated_at
                             from health_goals where user_id = ?
                             """,
                     MAPPER, userId));

@@ -72,4 +72,24 @@ public final class BodyMath {
         if (bmi < 30) return "overweight";
         return "obese";
     }
+
+    public record MacroTargets(int proteinG, int carbG, int fatG) {
+    }
+
+    /**
+     * Derive daily macro gram targets from body weight + kcal budget.
+     * protein ≈ 1.8 g/kg, fat ≈ 0.8 g/kg, carbs fill remaining kcal.
+     */
+    public static MacroTargets macroTargets(double weightKg, int dailyKcal) {
+        double w = weightKg > 0 ? weightKg : 70;
+        int protein = (int) Math.round(clamp(1.8 * w, 60, 220));
+        int fat = (int) Math.round(clamp(0.8 * w, 40, 120));
+        int kcalLeft = dailyKcal - protein * 4 - fat * 9;
+        int carb = Math.max(0, (int) Math.round(kcalLeft / 4.0));
+        return new MacroTargets(protein, carb, fat);
+    }
+
+    private static double clamp(double v, double lo, double hi) {
+        return Math.max(lo, Math.min(hi, v));
+    }
 }

@@ -26,6 +26,10 @@ public final class CivilDay {
         return LocalDate.now(ZONE);
     }
 
+    public static java.time.LocalTime nowIctTime() {
+        return java.time.LocalTime.now(ZONE);
+    }
+
     /** Inclusive start (UTC) and exclusive end (UTC) for the civil day. */
     public static Instant[] boundsUtc(LocalDate day) {
         ZonedDateTime startLocal = day.atStartOfDay(ZONE);

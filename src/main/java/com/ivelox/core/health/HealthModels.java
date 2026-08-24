@@ -85,9 +85,14 @@ public final class HealthModels {
             @JsonProperty("carb_g") double carbG,
             @JsonProperty("fat_g") double fatG,
             @JsonProperty("meal_type") String mealType,
-            @JsonProperty("logged_at") String loggedAt
+            @JsonProperty("logged_at") String loggedAt,
+            @JsonProperty("has_image") boolean hasImage,
+            @JsonProperty("image_url") String imageUrl
     ) {
-        public static MealLogResponse from(MealLog m) {
+        public static MealLogResponse from(MealLog m, boolean hasImage) {
+            String url = hasImage && m.id() != null
+                    ? "/api/v1/health/meals/" + m.id() + "/image"
+                    : m.imageUrl();
             return new MealLogResponse(
                     m.id().toString(),
                     m.rawInput(),
@@ -98,8 +103,14 @@ public final class HealthModels {
                     m.carbG(),
                     m.fatG(),
                     m.mealType(),
-                    m.loggedAt().toString()
+                    m.loggedAt().toString(),
+                    hasImage || (m.imageUrl() != null && !m.imageUrl().isBlank()),
+                    url
             );
+        }
+
+        public static MealLogResponse from(MealLog m) {
+            return from(m, m.imageUrl() != null && !m.imageUrl().isBlank());
         }
     }
 
@@ -122,7 +133,9 @@ public final class HealthModels {
             @JsonProperty("carb_g") double carbG,
             @JsonProperty("fat_g") double fatG,
             @JsonProperty("meal_type") String mealType,
-            @JsonProperty("logged_at") String loggedAt
+            @JsonProperty("logged_at") String loggedAt,
+            @JsonProperty("image_base64") String imageBase64,
+            @JsonProperty("image_mime") String imageMime
     ) {
     }
 
@@ -231,6 +244,10 @@ public final class HealthModels {
             java.time.LocalDate startAt,
             java.time.LocalDate targetAt,
             String mealPlanJson,
+            Integer proteinGTarget,
+            Integer carbGTarget,
+            Integer fatGTarget,
+            String mealTypesJson,
             Instant updatedAt
     ) {
     }
@@ -254,8 +271,14 @@ public final class HealthModels {
             @JsonProperty("target_kcal") int targetKcal,
             double pct,
             String suggestion,
-            String notes
+            String notes,
+            String status,
+            @JsonProperty("eaten_kcal") Double eatenKcal,
+            @JsonProperty("base_kcal") Integer baseKcal
     ) {
+        public MealPlanSlotResponse(String mealType, int targetKcal, double pct, String suggestion, String notes) {
+            this(mealType, targetKcal, pct, suggestion, notes, null, null, null);
+        }
     }
 
     public record GoalResponse(
@@ -272,9 +295,13 @@ public final class HealthModels {
             @JsonProperty("kg_to_change") Double kgToChange,
             @JsonProperty("daily_kcal_target") Integer dailyKcalTarget,
             @JsonProperty("daily_burn_target") Integer dailyBurnTarget,
+            @JsonProperty("protein_g_target") Integer proteinGTarget,
+            @JsonProperty("carb_g_target") Integer carbGTarget,
+            @JsonProperty("fat_g_target") Integer fatGTarget,
             @JsonProperty("start_at") String startAt,
             @JsonProperty("target_at") String targetAt,
-            @JsonProperty("meal_plan") java.util.List<MealPlanSlotResponse> mealPlan
+            @JsonProperty("meal_plan") java.util.List<MealPlanSlotResponse> mealPlan,
+            @JsonProperty("meal_types") java.util.List<String> mealTypes
     ) {
     }
 
@@ -287,12 +314,18 @@ public final class HealthModels {
             @JsonProperty("protein_g") double proteinG,
             @JsonProperty("carb_g") double carbG,
             @JsonProperty("fat_g") double fatG,
+            @JsonProperty("protein_g_target") Integer proteinGTarget,
+            @JsonProperty("carb_g_target") Integer carbGTarget,
+            @JsonProperty("fat_g_target") Integer fatGTarget,
             @JsonProperty("meal_count") int mealCount,
             Double bmi,
             @JsonProperty("bmi_category") String bmiCategory,
             @JsonProperty("target_weight_kg") Double targetWeightKg,
+            @JsonProperty("weight_kg_today") Double weightKgToday,
             String tip,
-            @JsonProperty("meal_plan") java.util.List<MealPlanSlotResponse> mealPlan
+            @JsonProperty("meal_plan") java.util.List<MealPlanSlotResponse> mealPlan,
+            @JsonProperty("day_closed") boolean dayClosed,
+            @JsonProperty("deficit_tips") java.util.List<String> deficitTips
     ) {
     }
 
@@ -304,6 +337,43 @@ public final class HealthModels {
             @JsonProperty("avg_eaten_kcal") double avgEatenKcal,
             @JsonProperty("daily_kcal_target") Integer dailyKcalTarget,
             Integer score,
+            java.util.List<String> tips
+    ) {
+    }
+
+    public record UpsertMealSlotRequest(
+            @JsonProperty("date") String date,
+            @JsonProperty("meal_type") String mealType,
+            String status
+    ) {
+    }
+
+    public record DailyWeightRequest(
+            @JsonProperty("date") String date,
+            @JsonProperty("weight_kg") double weightKg
+    ) {
+    }
+
+    public record DailyWeightResponse(
+            @JsonProperty("date") String date,
+            @JsonProperty("weight_kg") double weightKg,
+            Double bmi,
+            @JsonProperty("bmi_category") String bmiCategory
+    ) {
+    }
+
+    public record DayCloseResponse(
+            @JsonProperty("date") String date,
+            @JsonProperty("eaten_kcal") double eatenKcal,
+            @JsonProperty("burned_kcal") double burnedKcal,
+            @JsonProperty("net_kcal") double netKcal,
+            @JsonProperty("protein_g") double proteinG,
+            @JsonProperty("carb_g") double carbG,
+            @JsonProperty("fat_g") double fatG,
+            @JsonProperty("kcal_target") Integer kcalTarget,
+            @JsonProperty("protein_g_target") Integer proteinGTarget,
+            @JsonProperty("carb_g_target") Integer carbGTarget,
+            @JsonProperty("fat_g_target") Integer fatGTarget,
             java.util.List<String> tips
     ) {
     }

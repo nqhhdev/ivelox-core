@@ -146,4 +146,25 @@ public class MealLogRepository {
         );
         return v == null ? 0 : v;
     }
+
+    /** Sum kcal grouped by meal_type for a civil day (null/blank → "other"). */
+    public java.util.Map<String, Double> sumKcalByMealType(String userId, LocalDate day) {
+        Instant[] bounds = CivilDay.boundsUtc(day);
+        java.util.Map<String, Double> out = new java.util.HashMap<>();
+        jdbc.query("""
+                select coalesce(nullif(trim(meal_type), ''), 'other') as mt, coalesce(sum(kcal),0) as k
+                from meal_logs
+                where user_id = ? and logged_at >= ? and logged_at < ?
+                group by 1
+                """,
+                (rs, rowNum) -> {
+                    out.put(rs.getString("mt"), rs.getDouble("k"));
+                    return null;
+                },
+                userId,
+                Timestamp.from(bounds[0]),
+                Timestamp.from(bounds[1])
+        );
+        return out;
+    }
 }
