@@ -5,7 +5,6 @@ import java.time.LocalDate;
 import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -16,6 +15,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -36,15 +36,18 @@ public class HealthController {
     private final IveloxProperties props;
     private final FoodResolveService foodResolve;
     private final MealService mealService;
+    private final HealthProfileService profile;
 
     public HealthController(
             IveloxProperties props,
             FoodResolveService foodResolve,
-            MealService mealService
+            MealService mealService,
+            HealthProfileService profile
     ) {
         this.props = props;
         this.foodResolve = foodResolve;
         this.mealService = mealService;
+        this.profile = profile;
     }
 
     @PostMapping("/foods/resolve")
@@ -98,8 +101,7 @@ public class HealthController {
     ) {
         requireFeature();
         String userId = ownerId(auth);
-        LocalDate day = parseDate(date);
-        return mealService.list(userId, day).stream()
+        return mealService.list(userId, parseDate(date)).stream()
                 .map(HealthModels.MealLogResponse::from)
                 .toList();
     }
@@ -107,25 +109,97 @@ public class HealthController {
     @DeleteMapping("/meals/{id}")
     public ResponseEntity<Void> deleteMeal(Authentication auth, @PathVariable("id") String id) {
         requireFeature();
-        String userId = ownerId(auth);
-        UUID mealId;
-        try {
-            mealId = UUID.fromString(id);
-        } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid meal id");
-        }
-        mealService.delete(userId, mealId);
+        mealService.delete(ownerId(auth), parseUuid(id, "invalid meal id"));
         return ResponseEntity.noContent().build();
     }
 
-    @GetMapping("/check/today")
-    public HealthModels.DayMealSummary today(
+    @PostMapping("/body-metrics")
+    public ResponseEntity<HealthModels.BodyMetricResponse> createBody(
+            Authentication auth,
+            @RequestBody HealthModels.CreateBodyMetricRequest req
+    ) {
+        requireFeature();
+        return ResponseEntity.status(HttpStatus.CREATED).body(profile.recordBody(ownerId(auth), req));
+    }
+
+    @GetMapping("/body-metrics/latest")
+    public HealthModels.BodyMetricResponse latestBody(Authentication auth) {
+        requireFeature();
+        return profile.latestBody(ownerId(auth));
+    }
+
+    @GetMapping("/body-metrics")
+    public List<HealthModels.BodyMetricResponse> bodyHistory(
+            Authentication auth,
+            @RequestParam("from") String from,
+            @RequestParam("to") String to
+    ) {
+        requireFeature();
+        return profile.bodyHistory(ownerId(auth), parseDate(from), parseDate(to));
+    }
+
+    @PutMapping("/goals")
+    public HealthModels.GoalResponse upsertGoals(
+            Authentication auth,
+            @RequestBody HealthModels.UpsertGoalRequest req
+    ) {
+        requireFeature();
+        return profile.upsertGoal(ownerId(auth), req);
+    }
+
+    @GetMapping("/goals")
+    public HealthModels.GoalResponse getGoals(Authentication auth) {
+        requireFeature();
+        return profile.getGoal(ownerId(auth));
+    }
+
+    @GetMapping("/goals/meal-plan")
+    public List<HealthModels.MealPlanSlotResponse> mealPlan(Authentication auth) {
+        requireFeature();
+        return profile.mealPlan(ownerId(auth));
+    }
+
+    @PostMapping("/burns")
+    public ResponseEntity<HealthModels.BurnLogResponse> createBurn(
+            Authentication auth,
+            @RequestBody HealthModels.CreateBurnRequest req
+    ) {
+        requireFeature();
+        return ResponseEntity.status(HttpStatus.CREATED).body(profile.createBurn(ownerId(auth), req));
+    }
+
+    @GetMapping("/burns")
+    public List<HealthModels.BurnLogResponse> listBurns(
             Authentication auth,
             @RequestParam("date") String date
     ) {
         requireFeature();
-        String userId = ownerId(auth);
-        return mealService.todaySummary(userId, parseDate(date));
+        return profile.listBurns(ownerId(auth), parseDate(date));
+    }
+
+    @DeleteMapping("/burns/{id}")
+    public ResponseEntity<Void> deleteBurn(Authentication auth, @PathVariable("id") String id) {
+        requireFeature();
+        profile.deleteBurn(ownerId(auth), parseUuid(id, "invalid burn id"));
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/check/today")
+    public HealthModels.TodayCheckResponse today(
+            Authentication auth,
+            @RequestParam("date") String date
+    ) {
+        requireFeature();
+        return profile.todayCheck(ownerId(auth), parseDate(date));
+    }
+
+    @GetMapping("/check/weekly")
+    public HealthModels.WeeklyCheckResponse weekly(
+            Authentication auth,
+            @RequestParam(value = "days", defaultValue = "7") int days
+    ) {
+        requireFeature();
+        return profile.weeklyCheck(ownerId(auth), days);
     }
 
     private void requireFeature() {
@@ -152,6 +226,14 @@ public class HealthController {
         }
     }
 
+    private static UUID parseUuid(String id, String err) {
+        try {
+            return UUID.fromString(id);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, err);
+        }
+    }
+
     private static void validateImage(byte[] decoded, String mime) {
         if (decoded.length == 0) {
             return;
@@ -163,11 +245,5 @@ public class HealthController {
         if (!ALLOWED_MIME.contains(normalized)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "unsupported image_mime");
         }
-    }
-
-    /** Unused helper kept for clarity — error bodies use Spring default message. */
-    @SuppressWarnings("unused")
-    private static Map<String, String> error(String msg) {
-        return Map.of("error", msg);
     }
 }

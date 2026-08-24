@@ -130,4 +130,20 @@ public class MealLogRepository {
                 Timestamp.from(bounds[1])
         );
     }
+
+    public double sumKcalRange(String userId, LocalDate from, LocalDate toInclusive) {
+        Instant start = CivilDay.boundsUtc(from)[0];
+        Instant end = CivilDay.boundsUtc(toInclusive)[1];
+        Double v = jdbc.queryForObject(
+                """
+                        select coalesce(sum(kcal),0) from meal_logs
+                        where user_id = ? and logged_at >= ? and logged_at < ?
+                        """,
+                Double.class,
+                userId,
+                Timestamp.from(start),
+                Timestamp.from(end)
+        );
+        return v == null ? 0 : v;
+    }
 }
