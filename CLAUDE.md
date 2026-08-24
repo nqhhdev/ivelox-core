@@ -1,8 +1,8 @@
 # iVelox Backend — Claude Instructions
 
 ## Project
-Personal backend platform. Go + Gin + Clean Architecture.
-Multi-service: auth foundation + pluggable services (Telegram bot, job finder, tools, etc.)
+Personal backend platform. Java 21 + Spring Boot 4 + layered architecture.
+Single-owner platform: Telegram-OTP auth, health tracking (food/meals/body/burns/goals), platform/feature flags.
 
 ## Git rules
 - Author: nqhhdev <nqhh.dev@gmail.com> — always, no exceptions
@@ -12,63 +12,68 @@ Multi-service: auth foundation + pluggable services (Telegram bot, job finder, t
 - Branch naming: `feature/<short-description>`, `fix/<short-description>`, `chore/<short-description>`
 - PR required for all changes to `main`, no exceptions
 
-## Architecture — Clean Architecture (strict)
+## Architecture
 ```
-domain/       → pure Go structs + interfaces, zero external imports
-usecase/      → business logic, imports domain only
-repository/   → implements domain interfaces, talks to PostgreSQL
-delivery/http → Gin handlers: parse request → call usecase → render JSON
-infrastructure → third-party clients (Supabase JWT)
-telegram/     → Telegram bot shell, extensible for new commands
+com.ivelox.core.auth      → OTP login via Telegram, JWT issuing/verification
+com.ivelox.core.config    → Spring configuration (security, properties, app config)
+com.ivelox.core.health    → food/meals/body-metrics/burns/goals domain + controller + repositories
+com.ivelox.core.platform  → platform/feature-flag endpoints
+com.ivelox.core.telegram  → Telegram bot client (OTP delivery)
 ```
-- Dependencies flow inward only: delivery → usecase → domain ← repository
-- All external dependencies injected via interfaces in domain/
-- Never import gin/pgx/etc in domain or usecase packages
+- Controllers are thin: parse request → call service → render JSON
+- No SQL in controllers — SQL lives in `*Repository` classes (JdbcClient/JdbcTemplate)
+- Schema managed by Flyway migrations in `src/main/resources/db/migration/`
 
 ## Stack
-- Go 1.22+ + Gin
-- pgx/v5 — PostgreSQL driver (Supabase)
-- golang-jwt/v5 — JWT verification (Supabase tokens)
-- godotenv — env loading
-- go-telegram-bot-api/v5 — Telegram bot
+- Java 21 + Spring Boot 4 (starters: web, security, validation, jdbc, actuator, flyway)
+- Flyway + PostgreSQL (Supabase) in prod, H2 file DB for local dev
+- jjwt — JWT issuing/verification (self-issued, not Supabase-verified)
+- go-telegram-bot-api-equivalent via `TelegramClient` — OTP delivery over Telegram
+- Gemini API — nutrition resolution for food logging
 
 ## Environment variables (required)
 ```
 PORT=8080
 FRONTEND_URL=
-SUPABASE_URL=
-SUPABASE_ANON_KEY=
-SUPABASE_JWT_SECRET=
-DATABASE_URL=
-TELEGRAM_TOKEN=
+JWT_SECRET=
+JWT_TTL_SECONDS=
+TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHAT_ID=
+OTP_TTL_SECONDS=
+OTP_MIN_INTERVAL_SECONDS=
+HEALTH_ENABLED=
 GEMINI_API_KEY=
+GEMINI_MODEL=
+# Prod Postgres (Fly/Supabase):
+SPRING_DATASOURCE_URL=
+SPRING_DATASOURCE_USERNAME=
+SPRING_DATASOURCE_PASSWORD=
+SPRING_DATASOURCE_DRIVER=
 ```
 
 ## Code rules
-- Go binary: `/opt/homebrew/bin/go` on macOS (always export PATH)
-- Run `go build ./...` before committing — zero tolerance for compile errors
-- Run `go test ./...` before committing
-- Handler functions must be thin: parse → call usecase → respond
-- No SQL in handlers or usecases — SQL only in repository/postgres/
+- Run `./mvnw -q compile` before committing — zero tolerance for compile errors
+- Run `./mvnw -q test` before committing
+- Controller methods must be thin: parse → call service → respond
+- No SQL in controllers or services — SQL only in `*Repository` classes
 - Error messages in JSON: `{"error": "message"}` format
-- All protected routes use `middleware.Auth(jwtSecret)`
+- All protected routes go through `JwtAuthFilter` / Spring Security config in `SecurityConfig`
 
 ## Adding new services
-New features (job finder, schedulers, bots) go in their own package under `internal/`.
-Each service gets its own domain interfaces if it needs DB access.
-Wire everything up in `cmd/server/main.go`.
+New features go in their own package under `com.ivelox.core.<feature>`.
+Each service gets its own repository if it needs DB access, plus a Flyway migration for schema changes.
+Wire security/config changes in `SecurityConfig` / `IveloxProperties`.
 
 ## Testing
-- Use fake/in-memory repos for unit tests (no real DB)
-- Test files: `*_test.go` in same package with `_test` suffix
-- Run: `export PATH="/opt/homebrew/bin:$PATH" && go test ./... -v`
+- Use fakes/mocks for unit tests where possible; `spring-boot-starter-*-test` starters available for slice tests
+- Test files: `*Test.java` under `src/test/java`, mirroring the main package structure
+- Run: `./mvnw test`
 
 ## API conventions
 - Base path: `/api/v1`
-- Auth header: `Authorization: Bearer <supabase-jwt>`
-- Protected routes grouped under `middleware.Auth`
-- Health check: `GET /api/v1/health` — always returns `{"status":"ok"}`
+- Auth header: `Authorization: Bearer <jwt>`
+- Protected routes enforced via `JwtAuthFilter`
+- Health check: `GET /actuator/health` — returns Spring Boot actuator health status
 
 ## Docs
 - Deployment guide: `docs/deployment.md`
