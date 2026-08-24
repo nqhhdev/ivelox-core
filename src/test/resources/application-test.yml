@@ -17,4 +17,4 @@ ivelox:
   otp-min-interval-seconds: 30
   health-enabled: true
   gemini-api-key:
-  gemini-model: gemini-2.0-flash
+  gemini-model: gemini-2.5-flash

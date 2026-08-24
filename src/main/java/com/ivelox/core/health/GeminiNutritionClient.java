@@ -88,7 +88,7 @@ public class GeminiNutritionClient {
     private String generateRaw(List<Map<String, Object>> parts) {
         try {
             String model = props.geminiModel() == null || props.geminiModel().isBlank()
-                    ? "gemini-2.0-flash"
+                    ? "gemini-2.5-flash"
                     : props.geminiModel();
             String key = URLEncoder.encode(props.geminiApiKey(), StandardCharsets.UTF_8);
             URI uri = URI.create(
@@ -100,7 +100,10 @@ public class GeminiNutritionClient {
 
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("contents", List.of(Map.of("parts", parts)));
-            body.put("generationConfig", Map.of("temperature", 0.1));
+            body.put("generationConfig", Map.of(
+                    "temperature", 0.1,
+                    "responseMimeType", "application/json"
+            ));
 
             HttpRequest req = HttpRequest.newBuilder()
                     .uri(uri)
@@ -110,7 +113,7 @@ public class GeminiNutritionClient {
                     .build();
             HttpResponse<String> res = http.send(req, HttpResponse.BodyHandlers.ofString());
             if (res.statusCode() >= 300) {
-                log.warn("gemini generate failed status={} body={}", res.statusCode(), truncate(res.body()));
+                log.warn("gemini generate failed model={} status={} body={}", model, res.statusCode(), truncate(res.body()));
                 throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "nutrition resolver unavailable");
             }
             Map<String, Object> parsed = mapper.readValue(res.body(), Map.class);

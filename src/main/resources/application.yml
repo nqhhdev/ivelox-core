@@ -23,7 +23,8 @@ ivelox:
   otp-min-interval-seconds: ${OTP_MIN_INTERVAL_SECONDS:30}
   health-enabled: ${HEALTH_ENABLED:true}
   gemini-api-key: ${GEMINI_API_KEY:}
-  gemini-model: ${GEMINI_MODEL:gemini-2.0-flash}
+  # gemini-2.0-flash shut down 2026-06-01 — use a current Flash id
+  gemini-model: ${GEMINI_MODEL:gemini-2.5-flash}
 
 management:
   endpoints:
