@@ -18,10 +18,6 @@ Health: `GET http://localhost:8080/api/v1/health`
 2. `POST /api/v1/auth/otp/verify` `{"code":"123456"}` — returns JWT
 3. Use `Authorization: Bearer <token>` on protected routes
 
-## Legacy Go
-
-Previous Go implementation is under `legacy/go/` (not built).
-
 ## Docs
 
 - Spec: `docs/superpowers/specs/2026-08-23-spring-boot-private-platform-design.md`
