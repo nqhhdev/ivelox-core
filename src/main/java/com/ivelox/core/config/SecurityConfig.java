@@ -39,6 +39,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/health", "/api/v1/features").permitAll()
                         .requestMatchers("/api/v1/auth/otp/**").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/info").permitAll()
+                        .requestMatchers("/error").permitAll()
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(ex -> ex
