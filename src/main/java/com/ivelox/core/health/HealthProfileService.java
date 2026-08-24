@@ -157,7 +157,7 @@ public class HealthProfileService {
 
         LocalDate start = CivilDay.todayIct();
         LocalDate targetAt = start.plusWeeks(weeks);
-        var slots = HealthPlanning.buildDayMealPlan(dailyKcal);
+        var slots = HealthPlanning.buildDayMealPlan(dailyKcal, req.mealTypes());
         String planJson;
         try {
             planJson = json.writeValueAsString(slots.stream()
@@ -314,7 +314,7 @@ public class HealthProfileService {
             return "Over target today — prefer a lighter dinner and a short walk.";
         }
         if (eaten == 0) {
-            return "No meals logged yet — follow the meal plan slots for today.";
+            return "No meals logged yet — stay under your daily kcal target.";
         }
         if (burned == 0) {
             return "Log activity to improve net kcal for the day.";

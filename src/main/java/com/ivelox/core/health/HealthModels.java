@@ -243,7 +243,9 @@ public final class HealthModels {
             @JsonProperty("activity_level") String activityLevel,
             @JsonProperty("weight_change_pct") Double weightChangePct,
             Integer weeks,
-            @JsonProperty("daily_burn_target") Integer dailyBurnTarget
+            @JsonProperty("daily_burn_target") Integer dailyBurnTarget,
+            /** Selected meal slots (breakfast/lunch/dinner/snack); empty → all four. */
+            @JsonProperty("meal_types") java.util.List<String> mealTypes
     ) {
     }
 
