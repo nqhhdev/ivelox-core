@@ -88,7 +88,7 @@ public class FoodCacheRepository {
                       kcal, protein_g, carb_g, fat_g, source, confidence, updated_at
                     ) values (?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                    id.toString(),
+                    id,
                     normalized,
                     item.quantity(),
                     item.unit(),

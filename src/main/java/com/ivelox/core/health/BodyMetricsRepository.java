@@ -39,7 +39,7 @@ public class BodyMetricsRepository {
                 insert into body_metrics (id, user_id, height_cm, weight_kg, bmi, recorded_at, created_at)
                 values (?, ?, ?, ?, ?, ?, ?)
                 """,
-                id.toString(), m.userId(), m.heightCm(), m.weightKg(), m.bmi(),
+                id, m.userId(), m.heightCm(), m.weightKg(), m.bmi(),
                 Timestamp.from(recorded), Timestamp.from(created));
         return new HealthModels.BodyMetric(id, m.userId(), m.heightCm(), m.weightKg(), m.bmi(), recorded);
     }

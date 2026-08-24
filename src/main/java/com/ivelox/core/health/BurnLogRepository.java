@@ -37,7 +37,7 @@ public class BurnLogRepository {
                 insert into burn_logs (id, user_id, activity_name, duration_min, kcal_burned, source, logged_at, created_at)
                 values (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                id.toString(), b.userId(), b.activityName(), b.durationMin(), b.kcalBurned(),
+                id, b.userId(), b.activityName(), b.durationMin(), b.kcalBurned(),
                 b.source(), Timestamp.from(logged), Timestamp.from(created));
         return new HealthModels.BurnLog(id, b.userId(), b.activityName(), b.durationMin(),
                 b.kcalBurned(), b.source(), logged);
@@ -56,7 +56,7 @@ public class BurnLogRepository {
     }
 
     public boolean delete(String userId, UUID id) {
-        return jdbc.update("delete from burn_logs where id = ? and user_id = ?", id.toString(), userId) > 0;
+        return jdbc.update("delete from burn_logs where id = ? and user_id = ?", id, userId) > 0;
     }
 
     public double sumKcal(String userId, LocalDate day) {

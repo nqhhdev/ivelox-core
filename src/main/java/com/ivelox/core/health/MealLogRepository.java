@@ -53,9 +53,9 @@ public class MealLogRepository {
                   kcal, protein_g, carb_g, fat_g, meal_type, logged_at, created_at
                 ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                id.toString(),
+                id,
                 meal.userId(),
-                meal.foodCacheId() == null ? null : meal.foodCacheId().toString(),
+                meal.foodCacheId(),
                 meal.rawInput() == null ? "" : meal.rawInput(),
                 meal.imageUrl(),
                 meal.quantity(),
@@ -103,7 +103,7 @@ public class MealLogRepository {
     public boolean delete(String userId, UUID id) {
         int n = jdbc.update(
                 "delete from meal_logs where id = ? and user_id = ?",
-                id.toString(),
+                id,
                 userId
         );
         return n > 0;
