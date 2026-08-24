@@ -112,7 +112,7 @@ class HealthControllerTest {
     @Test
     void unauthenticatedMealsRejected() throws Exception {
         mockMvc.perform(get("/api/v1/health/meals").param("date", "2026-08-23"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
