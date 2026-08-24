@@ -1,6 +1,9 @@
 package com.ivelox.core.health;
 
+import java.math.BigDecimal;
 import java.sql.Date;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.Optional;
@@ -19,16 +22,21 @@ public class HealthGoalsRepository {
         this.jdbc = jdbc;
     }
 
+    private static Double numeric(ResultSet rs, String column) throws SQLException {
+        BigDecimal v = rs.getObject(column, BigDecimal.class);
+        return v == null ? null : v.doubleValue();
+    }
+
     private static final RowMapper<HealthModels.HealthGoal> MAPPER = (rs, i) -> new HealthModels.HealthGoal(
             rs.getString("user_id"),
-            rs.getObject("height_cm", Double.class),
-            rs.getObject("weight_kg", Double.class),
+            numeric(rs, "height_cm"),
+            numeric(rs, "weight_kg"),
             rs.getString("sex"),
             rs.getObject("age_years", Integer.class),
             rs.getString("activity_level"),
-            rs.getObject("weight_change_pct", Double.class),
+            numeric(rs, "weight_change_pct"),
             rs.getObject("weeks", Integer.class),
-            rs.getObject("target_weight_kg", Double.class),
+            numeric(rs, "target_weight_kg"),
             rs.getObject("daily_kcal_target", Integer.class),
             rs.getObject("daily_burn_target", Integer.class),
             rs.getDate("start_at") == null ? null : rs.getDate("start_at").toLocalDate(),
