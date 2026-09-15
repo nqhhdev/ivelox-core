@@ -40,18 +40,22 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/auth/otp/**").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/info").permitAll()
                         .requestMatchers("/error").permitAll()
+                        .requestMatchers(
+                                "/swagger-ui.html", "/swagger-ui/**",
+                                "/v3/api-docs", "/v3/api-docs/**"
+                        ).permitAll()
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint((request, response, authException) -> {
                             response.setStatus(401);
                             response.setContentType("application/json");
-                            response.getWriter().write("{\"error\":\"unauthorized\"}");
+                            response.getWriter().write("{\"data\":null,\"error\":\"unauthorized\"}");
                         })
                         .accessDeniedHandler((request, response, accessDeniedException) -> {
                             response.setStatus(403);
                             response.setContentType("application/json");
-                            response.getWriter().write("{\"error\":\"forbidden\"}");
+                            response.getWriter().write("{\"data\":null,\"error\":\"forbidden\"}");
                         })
                 )
                 .httpBasic(basic -> basic.disable())

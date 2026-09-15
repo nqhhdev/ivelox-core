@@ -99,7 +99,8 @@ public class BodyAtlasService {
         );
     }
 
-    private static Map<String, Object> region(String id, String label, List<Number> position, Map<String, Object>... tips) {
+    @SafeVarargs
+private static Map<String, Object> region(String id, String label, List<Number> position, Map<String, Object>... tips) {
         return Map.of(
                 "id", id,
                 "label", label,

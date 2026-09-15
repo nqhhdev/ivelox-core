@@ -36,6 +36,9 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             String token = header.substring(7).trim();
             try {
                 Claims claims = jwtService.parse(token);
+                if (!"owner".equals(claims.getSubject())) {
+                    throw new IllegalArgumentException("unexpected subject");
+                }
                 String role = String.valueOf(claims.get("role", String.class));
                 var auth = new UsernamePasswordAuthenticationToken(
                         claims.getSubject(),

@@ -29,6 +29,10 @@ public class PlatformController {
                 "health", Map.of(
                         "enabled", props.healthEnabled(),
                         "auth_required", true
+                ),
+                "finance", Map.of(
+                        "enabled", props.financeEnabled(),
+                        "auth_required", true
                 )
         );
     }

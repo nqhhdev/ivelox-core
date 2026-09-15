@@ -16,7 +16,8 @@ public record IveloxProperties(
         long otpMinIntervalSeconds,
         boolean healthEnabled,
         String geminiApiKey,
-        String geminiModel
+        String geminiModel,
+        boolean financeEnabled
 ) {
     /** Comma-separated FRONTEND_URL; auto-adds www/apex twins and local aliases. */
     public List<String> allowedFrontendOrigins() {

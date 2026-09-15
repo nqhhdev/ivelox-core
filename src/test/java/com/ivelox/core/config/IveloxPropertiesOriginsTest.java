@@ -21,7 +21,8 @@ class IveloxPropertiesOriginsTest {
                 30,
                 true,
                 "",
-                "gemini"
+                "gemini",
+                true
         );
         List<String> origins = props.allowedFrontendOrigins();
         assertTrue(origins.contains("https://i-velox.app"));
