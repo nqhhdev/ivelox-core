@@ -333,7 +333,7 @@ public class HealthProfileService {
     }
 
     public HealthModels.WeeklyCheckResponse weeklyCheck(String userId, int days) {
-        int d = Math.min(30, Math.max(7, days));
+        int d = Math.min(366, Math.max(7, days));
         LocalDate end = CivilDay.todayIct();
         LocalDate start = end.minusDays(d - 1L);
         double eaten = mealRepo.sumKcalRange(userId, start, end);
@@ -359,11 +359,11 @@ public class HealthProfileService {
         } else {
             tips.add("Set a BMI-based goal to unlock calorie targets and a daily meal plan.");
         }
-        if (burned < 500) {
-            tips.add("Log a few walks or gym sessions this week to raise weekly burn.");
+        if (burned < 500.0 * (d / 7.0)) {
+            tips.add("Log more activity in this period to raise burn.");
             score = Math.max(40, score - 10);
         } else {
-            tips.add("Solid activity volume this week — maintain recovery and sleep.");
+            tips.add("Solid activity volume in this period — maintain recovery and sleep.");
         }
         if (tips.size() > 3) {
             tips = tips.subList(0, 3);

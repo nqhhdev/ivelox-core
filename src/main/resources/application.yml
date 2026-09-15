@@ -25,6 +25,7 @@ ivelox:
   gemini-api-key: ${GEMINI_API_KEY:}
   # gemini-2.0-flash shut down 2026-06-01 — use a current Flash id
   gemini-model: ${GEMINI_MODEL:gemini-2.5-flash}
+  finance-enabled: ${FINANCE_ENABLED:true}
 
 management:
   endpoints:
