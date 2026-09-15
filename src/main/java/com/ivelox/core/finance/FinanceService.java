@@ -13,14 +13,13 @@ import java.util.stream.Collectors;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.ivelox.core.health.CivilDay;
 
 @Service
 public class FinanceService {
-
-    private static final String OWNER = "owner";
 
     private final FinanceRepository repo;
     private final FinanceDuePoster duePoster;
@@ -39,7 +38,7 @@ public class FinanceService {
     // ---------------------------------------------------------------- dashboard
 
     public FinanceModels.Dashboard dashboard(String userId, String monthParam, String currencyParam) {
-        duePoster.postForDay(CivilDay.todayIct());
+        duePoster.catchUpTo(CivilDay.todayIct());
 
         var settings = repo.settings(userId);
         YearMonth month = parseMonth(monthParam);
@@ -118,7 +117,7 @@ public class FinanceService {
             if (!currency.equals(loan.currency())) {
                 continue;
             }
-            long remaining = FinanceMath.remainingLoan(loan.principalMinor(), allLoanPayments(loan));
+            long remaining = remainingOf(userId, loan);
             if (remaining <= 0) {
                 continue;
             }
@@ -147,22 +146,13 @@ public class FinanceService {
         return candidate.isAfter(horizon) ? Optional.empty() : Optional.of(candidate);
     }
 
-    private List<FinanceMath.Tx> allLoanPayments(FinanceModels.Loan loan) {
-        return repo.listTx(OWNER, LocalDate.of(2000, 1, 1), LocalDate.of(2100, 1, 1),
-                        "loan_payment", null, loan.currency(), 10_000, null, null)
-                .stream()
-                .filter(t -> loan.id().equals(t.loanId()))
-                .map(t -> new FinanceMath.Tx(t.kind(), t.amountMinor(), t.occurredOn(), t.currency()))
-                .toList();
+    private long remainingOf(String userId, FinanceModels.Loan loan) {
+        long paid = repo.sumLoanPayments(userId, loan.id(), loan.currency());
+        return Math.max(0, loan.principalMinor() - paid);
     }
 
     private FinanceModels.SavingView toSavingView(String userId, FinanceModels.SavingGoal s) {
-        long contributed = repo.listTx(userId, LocalDate.of(2000, 1, 1), LocalDate.of(2100, 1, 1),
-                        "saving", null, s.currency(), 10_000, null, null)
-                .stream()
-                .filter(t -> s.id().equals(t.savingGoalId()))
-                .mapToLong(FinanceModels.Tx::amountMinor)
-                .sum();
+        long contributed = repo.sumSavingContributions(userId, s.id(), s.currency());
         return new FinanceModels.SavingView(
                 s.id().toString(), s.name(), s.currency(),
                 money(s.targetAmountMinor(), s.currency()),
@@ -173,7 +163,7 @@ public class FinanceService {
     }
 
     private FinanceModels.LoanView toLoanView(String userId, FinanceModels.Loan l) {
-        long remaining = FinanceMath.remainingLoan(l.principalMinor(), allLoanPayments(l));
+        long remaining = remainingOf(userId, l);
         return new FinanceModels.LoanView(
                 l.id().toString(), l.name(), l.currency(),
                 money(l.principalMinor(), l.currency()),
@@ -214,7 +204,7 @@ public class FinanceService {
                 if (req.savingGoalId() == null) {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "missing_link");
                 }
-                var goal = repo.findSaving(req.savingGoalId())
+                var goal = repo.findSaving(userId, req.savingGoalId())
                         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "not_found"));
                 requireSameCurrency(goal.currency(), currency);
                 savingGoalId = goal.id();
@@ -223,16 +213,22 @@ public class FinanceService {
                 if (req.loanId() == null) {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "missing_link");
                 }
-                var loan = repo.findLoan(req.loanId())
+                var loan = repo.findLoan(userId, req.loanId())
                         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "not_found"));
                 requireSameCurrency(loan.currency(), currency);
+                if ("loan_payment".equals(req.kind())) {
+                    long remaining = remainingOf(userId, loan);
+                    if (amountMinor > remaining) {
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "amount_exceeds_remaining");
+                    }
+                }
                 loanId = loan.id();
             }
             case "fixed" -> {
                 if (req.fixedExpenseId() == null) {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "missing_link");
                 }
-                var fixed = repo.findFixed(req.fixedExpenseId())
+                var fixed = repo.findFixed(userId, req.fixedExpenseId())
                         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "not_found"));
                 requireSameCurrency(fixed.currency(), currency);
                 fixedExpenseId = fixed.id();
@@ -267,10 +263,17 @@ public class FinanceService {
         LocalDate cursorDay = null;
         UUID cursorId = null;
         if (cursor != null && !cursor.isBlank()) {
-            String decoded = new String(Base64.getUrlDecoder().decode(cursor));
-            String[] parts = decoded.split("\\|", 2);
-            cursorDay = LocalDate.parse(parts[0]);
-            cursorId = UUID.fromString(parts[1]);
+            try {
+                String decoded = new String(Base64.getUrlDecoder().decode(cursor));
+                String[] parts = decoded.split("\\|", 2);
+                if (parts.length != 2) {
+                    throw new IllegalArgumentException("malformed cursor");
+                }
+                cursorDay = LocalDate.parse(parts[0]);
+                cursorId = UUID.fromString(parts[1]);
+            } catch (RuntimeException e) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid cursor");
+            }
         }
 
         var rows = repo.listTx(userId, f, t, kind, category, currency, lim + 1, cursorDay, cursorId);
@@ -284,9 +287,9 @@ public class FinanceService {
         return new FinanceModels.TxPage(rows.stream().map(FinanceModels.TxView::of).toList(), nextCursor);
     }
 
-    public void deleteTx(UUID id) {
-        var tx = repo.findTx(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "not_found"));
-        repo.deleteTx(tx.id());
+    public void deleteTx(String userId, UUID id) {
+        var tx = repo.findTx(userId, id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "not_found"));
+        repo.deleteTx(userId, tx.id());
     }
 
     // ---------------------------------------------------------------- setup CRUD
@@ -295,6 +298,7 @@ public class FinanceService {
         return repo.incomes(userId).stream().map(FinanceModels.IncomeView::of).toList();
     }
 
+    @Transactional
     public FinanceModels.IncomeView createIncome(String userId, FinanceModels.IncomeWrite req) {
         requireName(req.name());
         int dayOfMonth = requireDay(req.dayOfMonth());
@@ -319,20 +323,19 @@ public class FinanceService {
         return FinanceModels.IncomeView.of(saved);
     }
 
-    public FinanceModels.IncomeView updateIncome(UUID id, FinanceModels.IncomeWrite req) {
-        var existing = repo.findIncome(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "not_found"));
+    public FinanceModels.IncomeView updateIncome(String userId, UUID id, FinanceModels.IncomeWrite req) {
+        var existing = repo.findIncome(userId, id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "not_found"));
         String name = req.name() != null ? req.name() : existing.name();
         int dayOfMonth = req.dayOfMonth() != null ? requireDay(req.dayOfMonth()) : existing.dayOfMonth();
-        String recurrence = req.recurrence() != null ? req.recurrence() : existing.recurrence();
         long amountMinor = req.amount() != null ? FinanceMoney.toMinor(req.amount(), existing.currency()) : existing.amountMinor();
         var updated = new FinanceModels.Income(existing.id(), existing.userId(), name, amountMinor,
-                existing.currency(), dayOfMonth, recurrence, existing.createdAt());
+                existing.currency(), dayOfMonth, existing.recurrence(), existing.createdAt());
         repo.updateIncome(updated);
         return FinanceModels.IncomeView.of(updated);
     }
 
-    public void deleteIncome(UUID id) {
-        if (repo.deleteIncome(id) == 0) {
+    public void deleteIncome(String userId, UUID id) {
+        if (repo.deleteIncome(userId, id) == 0) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "not_found");
         }
     }
@@ -360,7 +363,7 @@ public class FinanceService {
     }
 
     public FinanceModels.SavingView updateSaving(String userId, UUID id, FinanceModels.SavingWrite req) {
-        var existing = repo.findSaving(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "not_found"));
+        var existing = repo.findSaving(userId, id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "not_found"));
         String name = req.name() != null ? req.name() : existing.name();
         int dayOfMonth = req.dayOfMonth() != null ? requireDay(req.dayOfMonth()) : existing.dayOfMonth();
         long targetMinor = req.targetAmount() != null ? FinanceMoney.toMinor(req.targetAmount(), existing.currency()) : existing.targetAmountMinor();
@@ -373,8 +376,8 @@ public class FinanceService {
         return toSavingView(userId, updated);
     }
 
-    public void deleteSaving(UUID id) {
-        if (repo.deleteSaving(id) == 0) {
+    public void deleteSaving(String userId, UUID id) {
+        if (repo.deleteSaving(userId, id) == 0) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "not_found");
         }
     }
@@ -383,6 +386,7 @@ public class FinanceService {
         return repo.loans(userId).stream().map(l -> toLoanView(userId, l)).toList();
     }
 
+    @Transactional
     public FinanceModels.LoanView createLoan(String userId, FinanceModels.LoanWrite req) {
         requireName(req.name());
         int dayOfMonth = requireDay(req.dayOfMonth());
@@ -407,7 +411,7 @@ public class FinanceService {
     }
 
     public FinanceModels.LoanView updateLoan(String userId, UUID id, FinanceModels.LoanWrite req) {
-        var existing = repo.findLoan(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "not_found"));
+        var existing = repo.findLoan(userId, id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "not_found"));
         String name = req.name() != null ? req.name() : existing.name();
         int dayOfMonth = req.dayOfMonth() != null ? requireDay(req.dayOfMonth()) : existing.dayOfMonth();
         long principalMinor = req.principal() != null ? FinanceMoney.toMinor(req.principal(), existing.currency()) : existing.principalMinor();
@@ -419,8 +423,8 @@ public class FinanceService {
         return toLoanView(userId, updated);
     }
 
-    public void deleteLoan(UUID id) {
-        if (repo.deleteLoan(id) == 0) {
+    public void deleteLoan(String userId, UUID id) {
+        if (repo.deleteLoan(userId, id) == 0) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "not_found");
         }
     }
@@ -444,8 +448,8 @@ public class FinanceService {
         return FinanceModels.FixedView.of(saved);
     }
 
-    public FinanceModels.FixedView updateFixed(UUID id, FinanceModels.FixedWrite req) {
-        var existing = repo.findFixed(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "not_found"));
+    public FinanceModels.FixedView updateFixed(String userId, UUID id, FinanceModels.FixedWrite req) {
+        var existing = repo.findFixed(userId, id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "not_found"));
         String name = req.name() != null ? req.name() : existing.name();
         int dayOfMonth = req.dayOfMonth() != null ? requireDay(req.dayOfMonth()) : existing.dayOfMonth();
         long amountMinor = req.amount() != null ? FinanceMoney.toMinor(req.amount(), existing.currency()) : existing.amountMinor();
@@ -455,8 +459,8 @@ public class FinanceService {
         return FinanceModels.FixedView.of(updated);
     }
 
-    public void deleteFixed(UUID id) {
-        if (repo.deleteFixed(id) == 0) {
+    public void deleteFixed(String userId, UUID id) {
+        if (repo.deleteFixed(userId, id) == 0) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "not_found");
         }
     }

@@ -90,6 +90,22 @@ class FinanceMathTest {
     }
 
     @Test
+    void todaySlotUsesFloorDivisionWhenOverBudget() {
+        // pool = -1, 2 days left (29th and 30th of September): mathematical floor(-1/2) = -1,
+        // not truncated-toward-zero 0.
+        YearMonth month = YearMonth.of(2026, 9);
+        LocalDate today = LocalDate.of(2026, 9, 29);
+        List<FinanceMath.Tx> txs = List.of(
+                new FinanceMath.Tx("income", 0, LocalDate.of(2026, 9, 1), "USD"),
+                new FinanceMath.Tx("fixed", 1, LocalDate.of(2026, 9, 1), "USD")
+        );
+
+        var slice = FinanceMath.compute(txs, "USD", month, today);
+        assertEquals(-1, slice.pool());
+        assertEquals(-1, slice.todaySlot(), "floor(-1/2) must be -1, not 0");
+    }
+
+    @Test
     void remainingLoanNeverGoesNegative() {
         List<FinanceMath.Tx> payments = List.of(
                 new FinanceMath.Tx("loan_payment", 30_000_000, LocalDate.of(2026, 9, 1), "VND"),

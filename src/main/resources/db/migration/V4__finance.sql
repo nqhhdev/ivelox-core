@@ -105,3 +105,23 @@ create table if not exists finance_notify_log (
 
 create unique index if not exists finance_notify_dedup_idx
   on finance_notify_log (user_id, type, civil_day, currency);
+
+create table if not exists finance_due_postings (
+  id uuid primary key,
+  user_id text not null default 'owner',
+  kind text not null,
+  source_id uuid not null,
+  period char(7) not null,
+  created_at timestamp with time zone not null,
+  constraint finance_due_postings_kind check (kind in (
+    'income', 'fixed', 'saving', 'loan_payment'
+  ))
+);
+
+create unique index if not exists finance_due_postings_dedup_idx
+  on finance_due_postings (user_id, kind, source_id, period);
+
+create table if not exists finance_due_cursor (
+  user_id text primary key,
+  last_posted_on date
+);

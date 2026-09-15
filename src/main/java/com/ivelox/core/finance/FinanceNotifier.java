@@ -74,6 +74,7 @@ public class FinanceNotifier {
             telegram.sendMessage(text);
         } catch (Exception e) {
             log.warn("finance telegram {} skipped: {}", type, e.getMessage());
+            repo.deleteNotifyLog("owner", type, civilDay, currency);
         }
     }
 

@@ -3,12 +3,14 @@ package com.ivelox.core.finance;
 import java.time.LocalDate;
 import java.time.YearMonth;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import com.ivelox.core.health.CivilDay;
 
 @Component
+@ConditionalOnProperty(prefix = "ivelox", name = "finance-enabled", havingValue = "true", matchIfMissing = true)
 public class FinanceDigestJob {
 
     private static final String OWNER = "owner";
@@ -25,7 +27,7 @@ public class FinanceDigestJob {
 
     @Scheduled(cron = "0 10 0 * * *", zone = "Asia/Ho_Chi_Minh")
     public void postDues() {
-        duePoster.postForDay(CivilDay.todayIct());
+        duePoster.catchUpTo(CivilDay.todayIct());
     }
 
     @Scheduled(cron = "0 0 21 * * *", zone = "Asia/Ho_Chi_Minh")

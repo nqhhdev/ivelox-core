@@ -2,6 +2,7 @@ package com.ivelox.core.finance;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -100,6 +101,64 @@ class FinanceControllerTest {
                             .content(body))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.error").value("invalid_category"));
+        }
+
+        @Test
+        void loanPaymentExceedingRemainingPrincipalReturns400() throws Exception {
+            String createLoan = """
+                    {"name":"Bike","principal":100,"monthly_payment":10,"currency":"USD","day_of_month":5}
+                    """;
+            String created = mockMvc.perform(post("/api/v1/finance/loans")
+                            .with(authentication(ownerAuth()))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(createLoan))
+                    .andExpect(status().isCreated())
+                    .andReturn().getResponse().getContentAsString();
+            String loanId = created.replaceAll("(?s).*\"id\"\\s*:\\s*\"([^\"]+)\".*", "$1");
+
+            String overpay = """
+                    {"kind":"loan_payment","amount":1000,"currency":"USD","loan_id":"%s"}
+                    """.formatted(loanId);
+
+            mockMvc.perform(post("/api/v1/finance/transactions")
+                            .with(authentication(ownerAuth()))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(overpay))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.error").value("amount_exceeds_remaining"));
+        }
+
+        @Test
+        void malformedTransactionCursorReturns400NotServerError() throws Exception {
+            mockMvc.perform(get("/api/v1/finance/transactions")
+                            .param("cursor", "not-valid-base64!!")
+                            .with(authentication(ownerAuth())))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.error").value("invalid cursor"));
+        }
+
+        @Test
+        void patchIncomeCannotChangeRecurrence() throws Exception {
+            String createIncome = """
+                    {"name":"Salary","amount":1000,"currency":"USD","day_of_month":1,"recurrence":"monthly"}
+                    """;
+            String created = mockMvc.perform(post("/api/v1/finance/incomes")
+                            .with(authentication(ownerAuth()))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(createIncome))
+                    .andExpect(status().isCreated())
+                    .andReturn().getResponse().getContentAsString();
+            String incomeId = created.replaceAll("(?s).*\"id\"\\s*:\\s*\"([^\"]+)\".*", "$1");
+
+            String patch = """
+                    {"recurrence":"none"}
+                    """;
+            mockMvc.perform(patch("/api/v1/finance/incomes/" + incomeId)
+                            .with(authentication(ownerAuth()))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(patch))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.recurrence").value("monthly"));
         }
     }
 

@@ -80,8 +80,7 @@ public class FinanceController {
     @DeleteMapping("/transactions/{id}")
     public ResponseEntity<Void> deleteTx(Authentication auth, @PathVariable("id") String id) {
         requireFeature();
-        ownerId(auth);
-        service.deleteTx(parseUuid(id));
+        service.deleteTx(ownerId(auth), parseUuid(id));
         return ResponseEntity.noContent().build();
     }
 
@@ -104,15 +103,13 @@ public class FinanceController {
             Authentication auth, @PathVariable("id") String id, @RequestBody FinanceModels.IncomeWrite req
     ) {
         requireFeature();
-        ownerId(auth);
-        return service.updateIncome(parseUuid(id), req);
+        return service.updateIncome(ownerId(auth), parseUuid(id), req);
     }
 
     @DeleteMapping("/incomes/{id}")
     public ResponseEntity<Void> deleteIncome(Authentication auth, @PathVariable("id") String id) {
         requireFeature();
-        ownerId(auth);
-        service.deleteIncome(parseUuid(id));
+        service.deleteIncome(ownerId(auth), parseUuid(id));
         return ResponseEntity.noContent().build();
     }
 
@@ -142,8 +139,7 @@ public class FinanceController {
     @DeleteMapping("/savings/{id}")
     public ResponseEntity<Void> deleteSaving(Authentication auth, @PathVariable("id") String id) {
         requireFeature();
-        ownerId(auth);
-        service.deleteSaving(parseUuid(id));
+        service.deleteSaving(ownerId(auth), parseUuid(id));
         return ResponseEntity.noContent().build();
     }
 
@@ -173,8 +169,7 @@ public class FinanceController {
     @DeleteMapping("/loans/{id}")
     public ResponseEntity<Void> deleteLoan(Authentication auth, @PathVariable("id") String id) {
         requireFeature();
-        ownerId(auth);
-        service.deleteLoan(parseUuid(id));
+        service.deleteLoan(ownerId(auth), parseUuid(id));
         return ResponseEntity.noContent().build();
     }
 
@@ -197,15 +192,13 @@ public class FinanceController {
             Authentication auth, @PathVariable("id") String id, @RequestBody FinanceModels.FixedWrite req
     ) {
         requireFeature();
-        ownerId(auth);
-        return service.updateFixed(parseUuid(id), req);
+        return service.updateFixed(ownerId(auth), parseUuid(id), req);
     }
 
     @DeleteMapping("/fixed/{id}")
     public ResponseEntity<Void> deleteFixed(Authentication auth, @PathVariable("id") String id) {
         requireFeature();
-        ownerId(auth);
-        service.deleteFixed(parseUuid(id));
+        service.deleteFixed(ownerId(auth), parseUuid(id));
         return ResponseEntity.noContent().build();
     }
 

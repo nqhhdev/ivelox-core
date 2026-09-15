@@ -59,6 +59,36 @@ class FinanceDuePosterTest {
     }
 
     @Test
+    void catchUpPostsDuesMissedDuringDowntime() {
+        repo.insertFixed(new FinanceModels.FixedExpense(
+                null, OWNER, "Rent", 1_000_000, "VND", 5, null));
+
+        // Simulate the app having last run on 2026-09-01, then a gap until 2026-09-06 (rent due on the 5th).
+        repo.advanceLastPostedOn(OWNER, LocalDate.of(2026, 9, 1));
+        duePoster.catchUpTo(LocalDate.of(2026, 9, 6));
+
+        var txs = repo.txsInMonth(OWNER, YearMonth.of(2026, 9)).stream()
+                .filter(t -> "fixed".equals(t.kind()))
+                .toList();
+        assertEquals(1, txs.size(), "the missed due day should be caught up, not skipped");
+        assertEquals(LocalDate.of(2026, 9, 5), txs.get(0).occurredOn());
+    }
+
+    @Test
+    void catchUpDoesNotDuplicateAlreadyPostedDays() {
+        repo.insertFixed(new FinanceModels.FixedExpense(
+                null, OWNER, "Rent", 1_000_000, "VND", 5, null));
+
+        duePoster.catchUpTo(LocalDate.of(2026, 9, 5));
+        duePoster.catchUpTo(LocalDate.of(2026, 9, 6));
+
+        var txs = repo.txsInMonth(OWNER, YearMonth.of(2026, 9)).stream()
+                .filter(t -> "fixed".equals(t.kind()))
+                .toList();
+        assertEquals(1, txs.size());
+    }
+
+    @Test
     void loanPaymentSkippedOnceFullyRepaid() {
         var loan = repo.insertLoan(new FinanceModels.Loan(
                 null, OWNER, "Small loan", 100_000, 100_000, "USD", 5, "", null));

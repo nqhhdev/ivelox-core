@@ -189,33 +189,76 @@ public class FinanceRepository {
         return jdbc.query(sql.toString(), TX, args.toArray());
     }
 
-    public Optional<FinanceModels.Tx> findTx(UUID id) {
+    public Optional<FinanceModels.Tx> findTx(String userId, UUID id) {
         List<FinanceModels.Tx> rows = jdbc.query(
-                "select * from finance_transactions where id = ?", TX, id);
+                "select * from finance_transactions where id = ? and user_id = ?", TX, id, userId);
         return rows.stream().findFirst();
     }
 
-    public int deleteTx(UUID id) {
-        return jdbc.update("delete from finance_transactions where id = ?", id);
+    public int deleteTx(String userId, UUID id) {
+        return jdbc.update("delete from finance_transactions where id = ? and user_id = ?", id, userId);
     }
 
-    public boolean postedThisMonth(String userId, String kind, UUID sourceId, YearMonth month, String sourceCol) {
-        LocalDate start = month.atDay(1);
-        LocalDate end = month.atEndOfMonth();
-        Integer n = jdbc.queryForObject(
-                "select count(*) from finance_transactions where user_id = ? and kind = ? and "
-                        + sourceCol + " = ? and occurred_on >= ? and occurred_on <= ?",
-                Integer.class,
-                userId, kind, sourceId, Date.valueOf(start), Date.valueOf(end));
-        return n != null && n > 0;
+    /** Sum of loan_payment transactions for one loan, in the loan's currency, across all history. */
+    public long sumLoanPayments(String userId, UUID loanId, String currency) {
+        Long sum = jdbc.queryForObject("""
+                select coalesce(sum(amount_minor), 0) from finance_transactions
+                where user_id = ? and loan_id = ? and kind = 'loan_payment' and currency = ?
+                """, Long.class, userId, loanId, currency);
+        return sum == null ? 0L : sum;
+    }
+
+    /** Sum of saving transactions for one goal, in the goal's currency, across all history. */
+    public long sumSavingContributions(String userId, UUID goalId, String currency) {
+        Long sum = jdbc.queryForObject("""
+                select coalesce(sum(amount_minor), 0) from finance_transactions
+                where user_id = ? and saving_goal_id = ? and kind = 'saving' and currency = ?
+                """, Long.class, userId, goalId, currency);
+        return sum == null ? 0L : sum;
+    }
+
+    /**
+     * Atomically claims a monthly due posting slot. Returns true if this call claimed it
+     * (caller should post the transaction), false if it was already claimed (already posted).
+     */
+    public boolean tryClaimDuePosting(String userId, String kind, UUID sourceId, YearMonth period) {
+        try {
+            jdbc.update("""
+                    insert into finance_due_postings (id, user_id, kind, source_id, period, created_at)
+                    values (?, ?, ?, ?, ?, ?)
+                    """,
+                    UUID.randomUUID(), userId, kind, sourceId, period.toString(), Timestamp.from(Instant.now()));
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    public Optional<LocalDate> lastPostedOn(String userId) {
+        List<LocalDate> rows = jdbc.query(
+                "select last_posted_on from finance_due_cursor where user_id = ?",
+                (rs, n) -> date(rs, "last_posted_on"), userId);
+        return rows.isEmpty() || rows.get(0) == null ? Optional.empty() : Optional.of(rows.get(0));
+    }
+
+    public void advanceLastPostedOn(String userId, LocalDate day) {
+        int updated = jdbc.update(
+                "update finance_due_cursor set last_posted_on = ? where user_id = ?",
+                Date.valueOf(day), userId);
+        if (updated == 0) {
+            jdbc.update(
+                    "insert into finance_due_cursor (user_id, last_posted_on) values (?, ?)",
+                    userId, Date.valueOf(day));
+        }
     }
 
     public List<FinanceModels.Income> incomes(String userId) {
         return jdbc.query("select * from finance_incomes where user_id = ? order by created_at", INCOME, userId);
     }
 
-    public Optional<FinanceModels.Income> findIncome(UUID id) {
-        return jdbc.query("select * from finance_incomes where id = ?", INCOME, id).stream().findFirst();
+    public Optional<FinanceModels.Income> findIncome(String userId, UUID id) {
+        return jdbc.query("select * from finance_incomes where id = ? and user_id = ?", INCOME, id, userId)
+                .stream().findFirst();
     }
 
     public FinanceModels.Income insertIncome(FinanceModels.Income row) {
@@ -235,20 +278,21 @@ public class FinanceRepository {
     public void updateIncome(FinanceModels.Income row) {
         jdbc.update("""
                 update finance_incomes set name = ?, amount_minor = ?, day_of_month = ?, recurrence = ?
-                where id = ?
-                """, row.name(), row.amountMinor(), row.dayOfMonth(), row.recurrence(), row.id());
+                where id = ? and user_id = ?
+                """, row.name(), row.amountMinor(), row.dayOfMonth(), row.recurrence(), row.id(), row.userId());
     }
 
-    public int deleteIncome(UUID id) {
-        return jdbc.update("delete from finance_incomes where id = ?", id);
+    public int deleteIncome(String userId, UUID id) {
+        return jdbc.update("delete from finance_incomes where id = ? and user_id = ?", id, userId);
     }
 
     public List<FinanceModels.SavingGoal> savings(String userId) {
         return jdbc.query("select * from finance_saving_goals where user_id = ? order by created_at", SAVING, userId);
     }
 
-    public Optional<FinanceModels.SavingGoal> findSaving(UUID id) {
-        return jdbc.query("select * from finance_saving_goals where id = ?", SAVING, id).stream().findFirst();
+    public Optional<FinanceModels.SavingGoal> findSaving(String userId, UUID id) {
+        return jdbc.query("select * from finance_saving_goals where id = ? and user_id = ?", SAVING, id, userId)
+                .stream().findFirst();
     }
 
     public FinanceModels.SavingGoal insertSaving(FinanceModels.SavingGoal row) {
@@ -269,20 +313,22 @@ public class FinanceRepository {
         jdbc.update("""
                 update finance_saving_goals
                 set name = ?, target_amount_minor = ?, monthly_amount_minor = ?, day_of_month = ?
-                where id = ?
-                """, row.name(), row.targetAmountMinor(), row.monthlyAmountMinor(), row.dayOfMonth(), row.id());
+                where id = ? and user_id = ?
+                """, row.name(), row.targetAmountMinor(), row.monthlyAmountMinor(), row.dayOfMonth(),
+                row.id(), row.userId());
     }
 
-    public int deleteSaving(UUID id) {
-        return jdbc.update("delete from finance_saving_goals where id = ?", id);
+    public int deleteSaving(String userId, UUID id) {
+        return jdbc.update("delete from finance_saving_goals where id = ? and user_id = ?", id, userId);
     }
 
     public List<FinanceModels.Loan> loans(String userId) {
         return jdbc.query("select * from finance_loans where user_id = ? order by created_at", LOAN, userId);
     }
 
-    public Optional<FinanceModels.Loan> findLoan(UUID id) {
-        return jdbc.query("select * from finance_loans where id = ?", LOAN, id).stream().findFirst();
+    public Optional<FinanceModels.Loan> findLoan(String userId, UUID id) {
+        return jdbc.query("select * from finance_loans where id = ? and user_id = ?", LOAN, id, userId)
+                .stream().findFirst();
     }
 
     public FinanceModels.Loan insertLoan(FinanceModels.Loan row) {
@@ -304,21 +350,22 @@ public class FinanceRepository {
         jdbc.update("""
                 update finance_loans
                 set name = ?, principal_minor = ?, monthly_payment_minor = ?, day_of_month = ?, note = ?
-                where id = ?
+                where id = ? and user_id = ?
                 """, row.name(), row.principalMinor(), row.monthlyPaymentMinor(),
-                row.dayOfMonth(), row.note(), row.id());
+                row.dayOfMonth(), row.note(), row.id(), row.userId());
     }
 
-    public int deleteLoan(UUID id) {
-        return jdbc.update("delete from finance_loans where id = ?", id);
+    public int deleteLoan(String userId, UUID id) {
+        return jdbc.update("delete from finance_loans where id = ? and user_id = ?", id, userId);
     }
 
     public List<FinanceModels.FixedExpense> fixed(String userId) {
         return jdbc.query("select * from finance_fixed_expenses where user_id = ? order by created_at", FIXED, userId);
     }
 
-    public Optional<FinanceModels.FixedExpense> findFixed(UUID id) {
-        return jdbc.query("select * from finance_fixed_expenses where id = ?", FIXED, id).stream().findFirst();
+    public Optional<FinanceModels.FixedExpense> findFixed(String userId, UUID id) {
+        return jdbc.query("select * from finance_fixed_expenses where id = ? and user_id = ?", FIXED, id, userId)
+                .stream().findFirst();
     }
 
     public FinanceModels.FixedExpense insertFixed(FinanceModels.FixedExpense row) {
@@ -337,12 +384,13 @@ public class FinanceRepository {
 
     public void updateFixed(FinanceModels.FixedExpense row) {
         jdbc.update("""
-                update finance_fixed_expenses set name = ?, amount_minor = ?, day_of_month = ? where id = ?
-                """, row.name(), row.amountMinor(), row.dayOfMonth(), row.id());
+                update finance_fixed_expenses set name = ?, amount_minor = ?, day_of_month = ?
+                where id = ? and user_id = ?
+                """, row.name(), row.amountMinor(), row.dayOfMonth(), row.id(), row.userId());
     }
 
-    public int deleteFixed(UUID id) {
-        return jdbc.update("delete from finance_fixed_expenses where id = ?", id);
+    public int deleteFixed(String userId, UUID id) {
+        return jdbc.update("delete from finance_fixed_expenses where id = ? and user_id = ?", id, userId);
     }
 
     public List<String> currenciesInUse(String userId) {
@@ -371,5 +419,13 @@ public class FinanceRepository {
         } catch (Exception e) {
             return false;
         }
+    }
+
+    /** Removes a reserved dedup record after a failed send, so a later retry is not permanently blocked. */
+    public void deleteNotifyLog(String userId, String type, LocalDate civilDay, String currency) {
+        jdbc.update("""
+                delete from finance_notify_log
+                where user_id = ? and type = ? and civil_day = ? and currency = ?
+                """, userId, type, Date.valueOf(civilDay), currency);
     }
 }

@@ -68,7 +68,7 @@ public final class FinanceMath {
         long dailyBefore = dailyMonth - dailyToday;
         long rest = pool - dailyBefore;
         int daysInclToday = Math.max(1, end.getDayOfMonth() - d.getDayOfMonth() + 1);
-        long todaySlot = rest / daysInclToday;
+        long todaySlot = Math.floorDiv(rest, daysInclToday);
         long todayLeft = todaySlot - dailyToday;
         long remainingMonth = pool - dailyMonth;
         return new MonthSlice(
