@@ -68,7 +68,7 @@ class HealthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.kcal").value(450))
+                .andExpect(jsonPath("$.data.kcal").value(450))
                 .andReturn()
                 .getResponse()
                 .getContentAsString();
@@ -80,14 +80,14 @@ class HealthControllerTest {
                         .param("date", "2026-08-23")
                         .with(authentication(ownerAuth())))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].id").value(id));
+                .andExpect(jsonPath("$.data[0].id").value(id));
 
         mockMvc.perform(get("/api/v1/health/check/today")
                         .param("date", "2026-08-23")
                         .with(authentication(ownerAuth())))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.eaten_kcal").value(450))
-                .andExpect(jsonPath("$.meal_count").value(1));
+                .andExpect(jsonPath("$.data.eaten_kcal").value(450))
+                .andExpect(jsonPath("$.data.meal_count").value(1));
 
         mockMvc.perform(delete("/api/v1/health/meals/" + id)
                         .with(authentication(ownerAuth())))
@@ -97,7 +97,7 @@ class HealthControllerTest {
                         .param("date", "2026-08-23")
                         .with(authentication(ownerAuth())))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.meal_count").value(0));
+                .andExpect(jsonPath("$.data.meal_count").value(0));
     }
 
     @Test
@@ -119,6 +119,6 @@ class HealthControllerTest {
     void livenessStillPublic() throws Exception {
         mockMvc.perform(get("/api/v1/health"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("ok"));
+                .andExpect(jsonPath("$.data.status").value("ok"));
     }
 }

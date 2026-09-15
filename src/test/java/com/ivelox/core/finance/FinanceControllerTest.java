@@ -87,7 +87,7 @@ class FinanceControllerTest {
             mockMvc.perform(get("/api/v1/finance/dashboard")
                             .with(authentication(ownerAuth())))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.currency").value("VND"));
+                    .andExpect(jsonPath("$.data.currency").value("VND"));
         }
 
         @Test
@@ -158,7 +158,7 @@ class FinanceControllerTest {
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(patch))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.recurrence").value("monthly"));
+                    .andExpect(jsonPath("$.data.recurrence").value("monthly"));
         }
     }
 
