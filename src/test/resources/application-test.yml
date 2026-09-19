@@ -18,3 +18,5 @@ ivelox:
   health-enabled: true
   gemini-api-key:
   gemini-model: gemini-2.5-flash
+  finance-enabled: true
+  payment-approval-enabled: true
