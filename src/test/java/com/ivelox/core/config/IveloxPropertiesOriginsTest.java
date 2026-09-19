@@ -22,6 +22,7 @@ class IveloxPropertiesOriginsTest {
                 true,
                 "",
                 "gemini",
+                true,
                 true
         );
         List<String> origins = props.allowedFrontendOrigins();
