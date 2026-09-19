@@ -36,6 +36,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.GET, "/api/v1/health", "/api/v1/features").permitAll()
                         .requestMatchers("/api/v1/auth/otp/**").permitAll()
+                        // Demo-only: payment approval is intentionally public (no JWT).
+                        .requestMatchers("/api/v1/payment-approval/**").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/info").permitAll()
                         .requestMatchers("/error").permitAll()
                         .requestMatchers(

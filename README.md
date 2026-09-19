@@ -18,6 +18,22 @@ Health: `GET http://localhost:8080/api/v1/health`
 2. `POST /api/v1/auth/otp/verify` `{"code":"123456"}` — returns JWT
 3. Use `Authorization: Bearer <token>` on protected routes
 
+## Git authorship (mandatory)
+
+Every commit **must** use only this identity — no exceptions:
+
+```
+Author:    nqhhdev <nqhh.dev@gmail.com>
+Committer: nqhhdev <nqhh.dev@gmail.com>
+```
+
+Rules for humans and AI agents:
+
+- Never set Author/Committer to Cursor, Claude, Copilot, or any other tool/bot.
+- Never add `Co-authored-by`, `Signed-off-by`, or similar trailers that name anyone/anything other than `nqhhdev`.
+- If a tool auto-injects a co-author trailer, strip it before push (amend + force-push on the feature branch if already pushed).
+- Do not change local `git config` to a different name/email for this repo.
+
 ## Docs
 
 - Spec: `docs/superpowers/specs/2026-08-23-spring-boot-private-platform-design.md`
