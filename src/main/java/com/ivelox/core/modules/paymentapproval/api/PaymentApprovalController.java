@@ -5,14 +5,13 @@ import java.time.format.DateTimeParseException;
 import java.util.UUID;
 
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -35,9 +34,11 @@ import com.ivelox.core.modules.paymentapproval.application.port.in.RejectPayment
 
 @RestController
 @RequestMapping("/api/v1/payment-approval")
-@Tag(name = "Payment Approval", description = "Incoming AED payment approval workflow")
-@SecurityRequirement(name = "bearerAuth")
+@Tag(name = "Payment Approval", description = "Demo AED payment approval workflow (no auth)")
 public class PaymentApprovalController {
+
+    /** Single-owner demo tenant — routes are public. */
+    private static final String DEMO_USER = "owner";
 
     private final IveloxProperties props;
     private final CreatePaymentRequestUseCase create;
@@ -65,51 +66,51 @@ public class PaymentApprovalController {
 
     @GetMapping("/payments")
     @Operation(summary = "List decided payments", description = "Returns approved and rejected payments, newest first.")
-    public PaymentList payments(Authentication auth) {
+    public PaymentList payments() {
         requireFeature();
-        return new PaymentList(list.list(auth.getName()).stream().map(PaymentView::of).toList());
+        return new PaymentList(list.list(DEMO_USER).stream().map(PaymentView::of).toList());
     }
 
     @GetMapping("/requests")
     @Operation(summary = "List pending payment requests", description = "Reloads pending requests after the client restarts.")
-    public PaymentList pending(Authentication auth) {
+    public PaymentList pending() {
         requireFeature();
-        return new PaymentList(pending.listPending(auth.getName()).stream().map(PaymentView::of).toList());
+        return new PaymentList(pending.listPending(DEMO_USER).stream().map(PaymentView::of).toList());
     }
 
     @GetMapping("/summary")
     @Operation(summary = "Get monthly approved payment summary")
-    public PaymentSummaryView summary(Authentication auth, @RequestParam String month) {
+    public PaymentSummaryView summary(@RequestParam String month) {
         requireFeature();
-        return PaymentSummaryView.of(summary.summary(auth.getName(), parseMonth(month)));
+        return PaymentSummaryView.of(summary.summary(DEMO_USER, parseMonth(month)));
     }
 
     @GetMapping("/payments/{id}")
     @Operation(summary = "Get a decided payment")
-    public PaymentView details(Authentication auth, @PathVariable String id) {
+    public PaymentView details(@PathVariable String id) {
         requireFeature();
-        return PaymentView.of(details.get(auth.getName(), parseUuid(id)));
+        return PaymentView.of(details.get(DEMO_USER, parseUuid(id)));
     }
 
     @PostMapping("/requests")
     @Operation(summary = "Create a random pending incoming payment request")
-    public ResponseEntity<PaymentView> create(Authentication auth, @RequestBody(required = false) CreateRequest ignored) {
+    public ResponseEntity<PaymentView> create(@RequestBody(required = false) CreateRequest ignored) {
         requireFeature();
-        return ResponseEntity.status(HttpStatus.CREATED).body(PaymentView.of(create.create(auth.getName())));
+        return ResponseEntity.status(HttpStatus.CREATED).body(PaymentView.of(create.create(DEMO_USER)));
     }
 
-    @PostMapping("/requests/{id}/approve")
+    @PutMapping("/requests/{id}/approve")
     @Operation(summary = "Approve a pending payment request", description = "Demo OTP is 8888.")
-    public PaymentView approve(Authentication auth, @PathVariable String id, @RequestBody DecisionRequest request) {
+    public PaymentView approve(@PathVariable String id, @RequestBody DecisionRequest request) {
         requireFeature();
-        return PaymentView.of(approve.approve(auth.getName(), parseUuid(id), request == null ? null : request.otp()));
+        return PaymentView.of(approve.approve(DEMO_USER, parseUuid(id), request == null ? null : request.otp()));
     }
 
-    @PostMapping("/requests/{id}/reject")
+    @PutMapping("/requests/{id}/reject")
     @Operation(summary = "Reject a pending payment request", description = "Demo OTP is 8888.")
-    public PaymentView reject(Authentication auth, @PathVariable String id, @RequestBody DecisionRequest request) {
+    public PaymentView reject(@PathVariable String id, @RequestBody DecisionRequest request) {
         requireFeature();
-        return PaymentView.of(reject.reject(auth.getName(), parseUuid(id), request == null ? null : request.otp()));
+        return PaymentView.of(reject.reject(DEMO_USER, parseUuid(id), request == null ? null : request.otp()));
     }
 
     private void requireFeature() {

@@ -14,7 +14,7 @@ public record FeaturesResponse(FeatureFlag health, FeatureFlag finance,
         return new FeaturesResponse(
                 new FeatureFlag(flags.healthEnabled(), true),
                 new FeatureFlag(flags.financeEnabled(), true),
-                new FeatureFlag(flags.paymentApprovalEnabled(), true)
+                new FeatureFlag(flags.paymentApprovalEnabled(), false)
         );
     }
 }
