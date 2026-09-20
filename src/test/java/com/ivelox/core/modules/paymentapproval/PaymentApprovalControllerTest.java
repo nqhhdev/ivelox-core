@@ -1,6 +1,8 @@
 package com.ivelox.core.modules.paymentapproval;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -12,6 +14,9 @@ import org.springframework.http.MediaType;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
+
+import com.jayway.jsonpath.JsonPath;
 
 @SpringBootTest(properties = "ivelox.payment-approval-enabled=true")
 @AutoConfigureMockMvc
@@ -23,10 +28,28 @@ class PaymentApprovalControllerTest {
 
     @Test
     void unauthenticatedPaymentsAreAllowedForDemo() throws Exception {
+        MvcResult created = mockMvc.perform(post("/api/v1/payment-approval/requests")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.currency").value("AED"))
+                .andReturn();
+
+        String id = JsonPath.read(created.getResponse().getContentAsString(), "$.data.id");
+
+        mockMvc.perform(put("/api/v1/payment-approval/requests/" + id + "/approve")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content("{\"otp\":\"8888\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("APPROVED"))
+                .andExpect(jsonPath("$.data.currency").value("AED"));
+
         mockMvc.perform(get("/api/v1/payment-approval/payments")
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.items").isArray());
+                .andExpect(jsonPath("$.data.items[0].id").value(id))
+                .andExpect(jsonPath("$.data.items[0].currency").value("AED"));
     }
 
     @Test
