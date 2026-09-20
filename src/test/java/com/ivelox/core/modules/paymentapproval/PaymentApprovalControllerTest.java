@@ -1,5 +1,6 @@
 package com.ivelox.core.modules.paymentapproval;
 
+import static org.hamcrest.Matchers.hasItem;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -45,11 +46,12 @@ class PaymentApprovalControllerTest {
                 .andExpect(jsonPath("$.data.status").value("APPROVED"))
                 .andExpect(jsonPath("$.data.currency").value("AED"));
 
+        // Shared H2 may already contain decided rows from other tests — don't assume index 0.
         mockMvc.perform(get("/api/v1/payment-approval/payments")
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.items[0].id").value(id))
-                .andExpect(jsonPath("$.data.items[0].currency").value("AED"));
+                .andExpect(jsonPath("$.data.items[*].id", hasItem(id)))
+                .andExpect(jsonPath("$.data.items[*].currency", hasItem("AED")));
     }
 
     @Test
