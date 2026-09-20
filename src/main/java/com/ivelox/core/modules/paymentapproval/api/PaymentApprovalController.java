@@ -2,12 +2,14 @@ package com.ivelox.core.modules.paymentapproval.api;
 
 import java.time.YearMonth;
 import java.time.format.DateTimeParseException;
+import java.util.List;
 import java.util.UUID;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -19,13 +21,17 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.ivelox.core.config.IveloxProperties;
-import com.ivelox.core.modules.paymentapproval.api.PaymentApprovalDtos.DecisionRequest;
 import com.ivelox.core.modules.paymentapproval.api.PaymentApprovalDtos.CreateRequest;
+import com.ivelox.core.modules.paymentapproval.api.PaymentApprovalDtos.DecisionRequest;
+import com.ivelox.core.modules.paymentapproval.api.PaymentApprovalDtos.DeletePaymentsRequest;
+import com.ivelox.core.modules.paymentapproval.api.PaymentApprovalDtos.DeletePaymentsResult;
 import com.ivelox.core.modules.paymentapproval.api.PaymentApprovalDtos.PaymentList;
 import com.ivelox.core.modules.paymentapproval.api.PaymentApprovalDtos.PaymentSummaryView;
 import com.ivelox.core.modules.paymentapproval.api.PaymentApprovalDtos.PaymentView;
 import com.ivelox.core.modules.paymentapproval.application.port.in.ApprovePaymentUseCase;
 import com.ivelox.core.modules.paymentapproval.application.port.in.CreatePaymentRequestUseCase;
+import com.ivelox.core.modules.paymentapproval.application.port.in.DeletePaymentUseCase;
+import com.ivelox.core.modules.paymentapproval.application.port.in.DeletePaymentsUseCase;
 import com.ivelox.core.modules.paymentapproval.application.port.in.GetPaymentDetailsUseCase;
 import com.ivelox.core.modules.paymentapproval.application.port.in.GetPaymentSummaryUseCase;
 import com.ivelox.core.modules.paymentapproval.application.port.in.ListPaymentsUseCase;
@@ -48,12 +54,15 @@ public class PaymentApprovalController {
     private final GetPaymentSummaryUseCase summary;
     private final ApprovePaymentUseCase approve;
     private final RejectPaymentUseCase reject;
+    private final DeletePaymentUseCase deletePayment;
+    private final DeletePaymentsUseCase deletePayments;
 
     public PaymentApprovalController(IveloxProperties props, CreatePaymentRequestUseCase create,
                                      ListPaymentsUseCase list, ListPendingPaymentsUseCase pending,
                                      GetPaymentDetailsUseCase details,
                                      GetPaymentSummaryUseCase summary, ApprovePaymentUseCase approve,
-                                     RejectPaymentUseCase reject) {
+                                     RejectPaymentUseCase reject, DeletePaymentUseCase deletePayment,
+                                     DeletePaymentsUseCase deletePayments) {
         this.props = props;
         this.create = create;
         this.list = list;
@@ -62,6 +71,8 @@ public class PaymentApprovalController {
         this.summary = summary;
         this.approve = approve;
         this.reject = reject;
+        this.deletePayment = deletePayment;
+        this.deletePayments = deletePayments;
     }
 
     @GetMapping("/payments")
@@ -111,6 +122,22 @@ public class PaymentApprovalController {
     public PaymentView reject(@PathVariable String id, @RequestBody DecisionRequest request) {
         requireFeature();
         return PaymentView.of(reject.reject(DEMO_USER, parseUuid(id), request == null ? null : request.otp()));
+    }
+
+    @DeleteMapping("/payments/{id}")
+    @Operation(summary = "Delete one payment", description = "Deletes a single payment by id (pending or decided).")
+    public ResponseEntity<Void> deleteOne(@PathVariable String id) {
+        requireFeature();
+        deletePayment.deleteOne(DEMO_USER, parseUuid(id));
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/payments")
+    @Operation(summary = "Delete many payments", description = "Deletes multiple payments by id list. Body: {\"ids\":[\"uuid\",...]}")
+    public DeletePaymentsResult deleteMany(@RequestBody DeletePaymentsRequest request) {
+        requireFeature();
+        List<UUID> ids = request == null ? null : request.ids();
+        return new DeletePaymentsResult(deletePayments.deleteMany(DEMO_USER, ids));
     }
 
     private void requireFeature() {

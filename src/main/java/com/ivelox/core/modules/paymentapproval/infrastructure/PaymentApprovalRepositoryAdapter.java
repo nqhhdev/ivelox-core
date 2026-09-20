@@ -95,4 +95,20 @@ public class PaymentApprovalRepositoryAdapter implements PaymentApprovalReposito
                 where id = ? and user_id = ? and status = 'PENDING'
                 """, status.name(), Timestamp.from(decidedAt), id, userId);
     }
+
+    @Override
+    public int deleteByIds(String userId, List<UUID> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return 0;
+        }
+        var placeholders = String.join(", ", java.util.Collections.nCopies(ids.size(), "?"));
+        Object[] args = new Object[ids.size() + 1];
+        args[0] = userId;
+        for (int i = 0; i < ids.size(); i++) {
+            args[i + 1] = ids.get(i);
+        }
+        return jdbc.update(
+                "delete from payment_approval_payments where user_id = ? and id in (" + placeholders + ")",
+                args);
+    }
 }

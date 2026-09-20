@@ -15,4 +15,5 @@ public interface PaymentApprovalRepositoryPort {
     Optional<Payment> find(String userId, UUID id);
     PaymentSummary approvedSummary(String userId, Instant from, Instant to);
     int decide(String userId, UUID id, PaymentStatus status, Instant decidedAt);
+    int deleteByIds(String userId, List<UUID> ids);
 }

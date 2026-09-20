@@ -14,6 +14,8 @@ import org.springframework.web.server.ResponseStatusException;
 import com.ivelox.core.health.CivilDay;
 import com.ivelox.core.modules.paymentapproval.application.port.in.ApprovePaymentUseCase;
 import com.ivelox.core.modules.paymentapproval.application.port.in.CreatePaymentRequestUseCase;
+import com.ivelox.core.modules.paymentapproval.application.port.in.DeletePaymentUseCase;
+import com.ivelox.core.modules.paymentapproval.application.port.in.DeletePaymentsUseCase;
 import com.ivelox.core.modules.paymentapproval.application.port.in.GetPaymentDetailsUseCase;
 import com.ivelox.core.modules.paymentapproval.application.port.in.GetPaymentSummaryUseCase;
 import com.ivelox.core.modules.paymentapproval.application.port.in.ListPaymentsUseCase;
@@ -27,7 +29,7 @@ import com.ivelox.core.modules.paymentapproval.domain.model.PaymentSummary;
 @Service
 public class PaymentApprovalService implements CreatePaymentRequestUseCase, GetPaymentDetailsUseCase,
         GetPaymentSummaryUseCase, ListPaymentsUseCase, ListPendingPaymentsUseCase,
-        ApprovePaymentUseCase, RejectPaymentUseCase {
+        ApprovePaymentUseCase, RejectPaymentUseCase, DeletePaymentUseCase, DeletePaymentsUseCase {
 
     private static final String DEMO_OTP = "8888";
     private static final List<String> RECIPIENTS = List.of("Ahmed K.", "Mariam S.", "Omar R.", "Noura A.");
@@ -87,6 +89,27 @@ public class PaymentApprovalService implements CreatePaymentRequestUseCase, GetP
     @Transactional
     public Payment reject(String userId, UUID id, String otp) {
         return decide(userId, id, otp, PaymentStatus.REJECTED);
+    }
+
+    @Override
+    @Transactional
+    public void deleteOne(String userId, UUID id) {
+        if (repo.deleteByIds(userId, List.of(id)) == 0) {
+            throw notFound();
+        }
+    }
+
+    @Override
+    @Transactional
+    public int deleteMany(String userId, List<UUID> ids) {
+        if (ids == null || ids.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid_ids");
+        }
+        int deleted = repo.deleteByIds(userId, ids);
+        if (deleted == 0) {
+            throw notFound();
+        }
+        return deleted;
     }
 
     private Payment decide(String userId, UUID id, String otp, PaymentStatus status) {
