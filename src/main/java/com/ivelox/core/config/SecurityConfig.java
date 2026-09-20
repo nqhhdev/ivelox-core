@@ -67,7 +67,14 @@ public class SecurityConfig {
     @Bean
     CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(List.of(props.frontendUrl()));
+        // Exact frontend origins (comma-separated FRONTEND_URL + www/localhost twins).
+        var patterns = new java.util.LinkedHashSet<>(props.allowedFrontendOrigins());
+        // Swagger UI is served from the API host — browsers send that Origin on "Try it out".
+        patterns.add("https://ivelox-core.fly.dev");
+        patterns.add("https://*.fly.dev");
+        patterns.add("http://localhost:*");
+        patterns.add("http://127.0.0.1:*");
+        config.setAllowedOriginPatterns(List.copyOf(patterns));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);
