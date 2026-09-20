@@ -12,6 +12,7 @@ FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 COPY --from=build /workspace/target/ivelox-core-*.jar /app/app.jar
 ENV PORT=8080
-ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75.0 -XX:+UseContainerSupport"
+# Faster first requests on small Fly VMs; keep container RAM under control.
+ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75.0 -XX:+UseContainerSupport -XX:+UseG1GC -XX:TieredStopAtLevel=1"
 EXPOSE 8080
 ENTRYPOINT ["java","-jar","/app/app.jar"]
