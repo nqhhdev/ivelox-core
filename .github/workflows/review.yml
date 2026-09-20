@@ -12,13 +12,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Legacy Go lint — skip when the module was removed (Spring Boot only).
+      - name: Detect Go module
+        id: go
+        run: |
+          if [ -f go.mod ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "No go.mod — skipping Go lint (Java/Spring Boot project)."
+          fi
+
       - name: Set up Go
+        if: steps.go.outputs.present == 'true'
         uses: actions/setup-go@v5
         with:
           go-version: "1.23"
           cache: true
 
       - name: Check formatting (gofmt)
+        if: steps.go.outputs.present == 'true'
         run: |
           unformatted=$(gofmt -l $(find . -name '*.go' -not -path './vendor/*'))
           if [ -n "$unformatted" ]; then
@@ -28,10 +41,13 @@ jobs:
           fi
 
       - name: go vet
+        if: steps.go.outputs.present == 'true'
         run: go vet ./...
 
       - name: Install staticcheck
+        if: steps.go.outputs.present == 'true'
         run: go install honnef.co/go/tools/cmd/staticcheck@latest
 
       - name: staticcheck
+        if: steps.go.outputs.present == 'true'
         run: staticcheck ./...
