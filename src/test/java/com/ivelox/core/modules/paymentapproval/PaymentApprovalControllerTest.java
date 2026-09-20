@@ -1,6 +1,8 @@
 package com.ivelox.core.modules.paymentapproval;
 
 import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.not;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -66,6 +68,43 @@ class PaymentApprovalControllerTest {
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value("invalid_id"));
+    }
+
+    @Test
+    void deleteOneAndDeleteManyRemovePayments() throws Exception {
+        String id1 = createPendingId();
+        String id2 = createPendingId();
+        String id3 = createPendingId();
+
+        mockMvc.perform(delete("/api/v1/payment-approval/payments/" + id1)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/v1/payment-approval/requests")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[*].id", not(hasItem(id1))));
+
+        mockMvc.perform(delete("/api/v1/payment-approval/payments")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content("{\"ids\":[\"" + id2 + "\",\"" + id3 + "\"]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.deleted").value(2));
+
+        mockMvc.perform(delete("/api/v1/payment-approval/payments/" + id1)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("payment_not_found"));
+    }
+
+    private String createPendingId() throws Exception {
+        MvcResult created = mockMvc.perform(post("/api/v1/payment-approval/requests")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isCreated())
+                .andReturn();
+        return JsonPath.read(created.getResponse().getContentAsString(), "$.data.id");
     }
 }
 

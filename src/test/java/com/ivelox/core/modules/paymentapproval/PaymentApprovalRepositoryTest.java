@@ -66,6 +66,18 @@ class PaymentApprovalRepositoryTest {
         assertEquals(1, summary.paymentCount());
     }
 
+    @Test
+    void deleteByIdsRemovesMatchingRows() {
+        Payment a = payment("PAY-DEL-1", Instant.parse("2026-09-10T10:00:00Z"));
+        Payment b = payment("PAY-DEL-2", Instant.parse("2026-09-10T11:00:00Z"));
+        repository.insert(a);
+        repository.insert(b);
+
+        assertEquals(2, repository.deleteByIds("owner", java.util.List.of(a.id(), b.id())));
+        assertEquals(0, repository.listPending("owner").size());
+        assertEquals(0, repository.deleteByIds("owner", java.util.List.of(a.id())));
+    }
+
     private static Payment payment(String reference, Instant createdAt) {
         return new Payment(UUID.randomUUID(), "owner", "Ahmed K.", 1250, "AED", PaymentStatus.PENDING,
                 reference, "note", createdAt, null);

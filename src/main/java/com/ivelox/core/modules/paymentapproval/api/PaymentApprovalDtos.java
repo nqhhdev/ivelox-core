@@ -55,4 +55,10 @@ public final class PaymentApprovalDtos {
 
     public record CreateRequest() {
     }
+
+    public record DeletePaymentsRequest(List<UUID> ids) {
+    }
+
+    public record DeletePaymentsResult(int deleted) {
+    }
 }
