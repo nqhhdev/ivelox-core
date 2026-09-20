@@ -17,6 +17,7 @@ public final class FinanceCatalog {
             new CurrencyInfo("EUR", 2, "€", "Euro"),
             new CurrencyInfo("GBP", 2, "£", "Pound sterling"),
             new CurrencyInfo("JPY", 0, "¥", "Japanese yen"),
+            new CurrencyInfo("AED", 2, "د.إ", "UAE dirham"),
             new CurrencyInfo("KRW", 0, "₩", "South Korean won"),
             new CurrencyInfo("SGD", 2, "S$", "Singapore dollar"),
             new CurrencyInfo("AUD", 2, "A$", "Australian dollar"),

@@ -1,75 +1,88 @@
 package com.ivelox.core.modules.paymentapproval;
 
+import static org.hamcrest.Matchers.hasItem;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers;
+import org.springframework.http.MediaType;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.setup.MockMvcBuilders;
-import org.springframework.web.context.WebApplicationContext;
+import org.springframework.test.web.servlet.MvcResult;
 
+import com.jayway.jsonpath.JsonPath;
+
+@SpringBootTest(properties = "ivelox.payment-approval-enabled=true")
+@AutoConfigureMockMvc
+@ActiveProfiles("test")
 class PaymentApprovalControllerTest {
 
-    @Nested
-    @SpringBootTest
-    @ActiveProfiles("test")
-    class Enabled {
-        @Autowired
-        private WebApplicationContext context;
-        private MockMvc mockMvc;
+    @Autowired
+    private MockMvc mockMvc;
 
-        @BeforeEach
-        void setUp() {
-            mockMvc = MockMvcBuilders.webAppContextSetup(context)
-                    .apply(SecurityMockMvcConfigurers.springSecurity()).build();
-        }
+    @Test
+    void unauthenticatedPaymentsAreAllowedForDemo() throws Exception {
+        MvcResult created = mockMvc.perform(post("/api/v1/payment-approval/requests")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.currency").value("AED"))
+                .andReturn();
 
-        @Test
-        void unauthenticatedPaymentsAreAllowedForDemo() throws Exception {
-            mockMvc.perform(get("/api/v1/payment-approval/payments"))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data.items").isArray());
-        }
+        String id = JsonPath.read(created.getResponse().getContentAsString(), "$.data.id");
 
-        @Test
-        void malformedMonthAndIdReturnStableErrors() throws Exception {
-            mockMvc.perform(get("/api/v1/payment-approval/summary")
-                            .param("month", "2026-13"))
-                    .andExpect(status().isBadRequest())
-                    .andExpect(jsonPath("$.error").value("invalid_month"));
+        mockMvc.perform(put("/api/v1/payment-approval/requests/" + id + "/approve")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content("{\"otp\":\"8888\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("APPROVED"))
+                .andExpect(jsonPath("$.data.currency").value("AED"));
 
-            mockMvc.perform(get("/api/v1/payment-approval/payments/not-a-uuid"))
-                    .andExpect(status().isBadRequest())
-                    .andExpect(jsonPath("$.error").value("invalid_id"));
-        }
+        // Shared H2 may already contain decided rows from other tests — don't assume index 0.
+        mockMvc.perform(get("/api/v1/payment-approval/payments")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[*].id", hasItem(id)))
+                .andExpect(jsonPath("$.data.items[*].currency", hasItem("AED")));
     }
 
-    @Nested
-    @SpringBootTest(properties = "ivelox.payment-approval-enabled=false")
-    @ActiveProfiles("test")
-    class Disabled {
-        @Autowired
-        private WebApplicationContext context;
-        private MockMvc mockMvc;
+    @Test
+    void malformedMonthAndIdReturnStableErrors() throws Exception {
+        mockMvc.perform(get("/api/v1/payment-approval/summary")
+                        .param("month", "2026-13")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("invalid_month"));
 
-        @BeforeEach
-        void setUp() {
-            mockMvc = MockMvcBuilders.webAppContextSetup(context)
-                    .apply(SecurityMockMvcConfigurers.springSecurity()).build();
-        }
+        mockMvc.perform(get("/api/v1/payment-approval/payments/not-a-uuid")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("invalid_id"));
+    }
+}
 
-        @Test
-        void paymentRoutesReturnFeatureDisabled() throws Exception {
-            mockMvc.perform(get("/api/v1/payment-approval/payments"))
-                    .andExpect(status().isNotFound())
-                    .andExpect(jsonPath("$.error").value("payment_feature_disabled"));
-        }
+@SpringBootTest(properties = "ivelox.payment-approval-enabled=false")
+@AutoConfigureMockMvc
+@ActiveProfiles("test")
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
+class PaymentApprovalControllerDisabledTest {
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @Test
+    void paymentRoutesReturnFeatureDisabled() throws Exception {
+        mockMvc.perform(get("/api/v1/payment-approval/payments")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("payment_feature_disabled"));
     }
 }
